@@ -24,7 +24,9 @@ import {
   Compass,
   Layers,
   FileText,
-  X
+  X,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 
 interface Destination {
@@ -80,10 +82,11 @@ export default function Dashboard() {
   const [copiedServer, setCopiedServer] = useState<boolean>(false);
   const [copiedKey, setCopiedKey] = useState<boolean>(false);
   
-  // Auto-hiding header scroll states
+  // Auto-hiding header scroll states & sidebar minimize state
   const [showHeader, setShowHeader] = useState<boolean>(true);
   const [lastScrollY, setLastScrollY] = useState<number>(0);
   const [activeNav, setActiveNav] = useState<string>('studio');
+  const [isSidebarMinimized, setIsSidebarMinimized] = useState<boolean>(false);
 
   const logContainerRef = useRef<HTMLDivElement>(null);
 
@@ -447,62 +450,84 @@ export default function Dashboard() {
         </div>
       </header>
 
-      {/* Body Wrapper with Left Sidebar */}
+      {/* Body Wrapper with Minimizable Left Sidebar */}
       <div className="app-body-wrapper">
         {/* Left Vertical Navigation Sidebar */}
-        <aside className="app-sidebar">
-          <div className="sidebar-section-title">Navigation</div>
+        <aside className={`app-sidebar ${isSidebarMinimized ? 'minimized' : ''}`}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: isSidebarMinimized ? 'center' : 'space-between', padding: '0 2px' }}>
+            {!isSidebarMinimized && <span className="sidebar-section-title">Navigation</span>}
+            <button 
+              className="btn btn-secondary" 
+              onClick={() => setIsSidebarMinimized(!isSidebarMinimized)}
+              style={{ padding: '6px', borderRadius: '6px' }}
+              title={isSidebarMinimized ? "Expand Sidebar" : "Minimize Sidebar"}
+            >
+              {isSidebarMinimized ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+            </button>
+          </div>
           
           <ul className="sidebar-nav-list">
             <li>
               <a 
                 className={`sidebar-nav-item ${activeNav === 'studio' ? 'active' : ''}`}
                 onClick={() => scrollToSection('sec-monitor')}
+                title="Studio Feed"
               >
-                <Tv size={18} /> Studio Feed
+                <Tv size={18} />
+                <span className="sidebar-nav-text">Studio Feed</span>
               </a>
             </li>
             <li>
               <a 
                 className={`sidebar-nav-item ${activeNav === 'ingest' ? 'active' : ''}`}
                 onClick={() => scrollToSection('sec-ingest')}
+                title="Ingest OBS"
               >
-                <Settings size={18} /> Ingest OBS
+                <Settings size={18} />
+                <span className="sidebar-nav-text">Ingest OBS</span>
               </a>
             </li>
             <li>
               <a 
                 className={`sidebar-nav-item ${activeNav === 'destinations' ? 'active' : ''}`}
                 onClick={() => scrollToSection('sec-destinations')}
+                title="Platform Target"
               >
-                <Layers size={18} /> Platform Target
+                <Layers size={18} />
+                <span className="sidebar-nav-text">Platform Target</span>
               </a>
             </li>
             <li>
               <a 
                 className={`sidebar-nav-item ${activeNav === 'logs' ? 'active' : ''}`}
                 onClick={() => scrollToSection('sec-logs')}
+                title="Process Logs"
               >
-                <Terminal size={18} /> Process Logs
+                <Terminal size={18} />
+                <span className="sidebar-nav-text">Process Logs</span>
               </a>
             </li>
             <li>
               <a 
                 className="sidebar-nav-item"
                 onClick={() => setIsFaqOpen(true)}
+                title="FAQ & Guide"
               >
-                <HelpCircle size={18} /> Buka Loker FAQ
+                <HelpCircle size={18} />
+                <span className="sidebar-nav-text">Buka FAQ</span>
               </a>
             </li>
           </ul>
 
-          <div style={{ marginTop: 'auto', paddingTop: '16px', borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div className="sidebar-section-title">Telemetry</div>
-            <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', padding: '0 12px' }}>
-              FFmpeg Path:<br/>
-              <code style={{ fontSize: '0.72rem', color: 'var(--text-primary)' }}>{ffmpegPath || 'detecting...'}</code>
+          {!isSidebarMinimized && (
+            <div style={{ marginTop: 'auto', paddingTop: '16px', borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div className="sidebar-section-title">Telemetry</div>
+              <div className="sidebar-telemetry-text" style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', padding: '0 12px' }}>
+                FFmpeg Path:<br/>
+                <code style={{ fontSize: '0.72rem', color: 'var(--text-primary)' }}>{ffmpegPath || 'detecting...'}</code>
+              </div>
             </div>
-          </div>
+          )}
         </aside>
 
         {/* Main Grid Content */}
@@ -594,7 +619,7 @@ export default function Dashboard() {
             <div id="sec-ingest" className="card">
               <div className="card-title">
                 <Settings size={18} style={{ color: 'var(--primary)' }} />
-                <span>Kredensial Ingest Stream OBS</span>
+                <span>Konfigurasi Ingest Stream OBS</span>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '16px' }}>
@@ -852,21 +877,21 @@ export default function Dashboard() {
         </main>
       </div>
 
-      {/* Loker FAQ Modal Component */}
+      {/* FAQ Modal Component (Vertical downward stacking layout) */}
       {isFaqOpen && (
         <div className="faq-modal-overlay" onClick={() => setIsFaqOpen(false)}>
           <div className="faq-modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="faq-modal-header">
               <h2 className="faq-title">
                 <HelpCircle size={22} style={{ color: 'var(--primary)' }} />
-                Loker FAQ & Support Guide
+                FAQ & Support Guide
               </h2>
               <button 
                 className="btn btn-secondary" 
                 style={{ padding: '6px 12px', fontSize: '0.82rem' }}
                 onClick={() => setIsFaqOpen(false)}
               >
-                <X size={16} /> Tutup Loker
+                <X size={16} /> Tutup FAQ
               </button>
             </div>
 
@@ -897,7 +922,7 @@ export default function Dashboard() {
         <div className="footer-inner" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <button className="btn btn-secondary" onClick={() => setIsFaqOpen(true)}>
-              <HelpCircle size={16} /> Buka Loker FAQ & Guide
+              <HelpCircle size={16} /> Buka FAQ & Guide
             </button>
             <a 
               href="https://github.com/studentawangihti/mystream" 

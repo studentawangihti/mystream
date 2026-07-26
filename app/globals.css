@@ -225,6 +225,23 @@ html, body {
   height: calc(100vh - 72px);
   overflow-y: auto;
   z-index: 90;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), padding 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.app-sidebar.minimized {
+  width: 72px;
+  padding: 24px 10px;
+}
+
+.app-sidebar.minimized .sidebar-section-title,
+.app-sidebar.minimized .sidebar-nav-text,
+.app-sidebar.minimized .sidebar-telemetry-text {
+  display: none;
+}
+
+.app-sidebar.minimized .sidebar-nav-item {
+  justify-content: center;
+  padding: 12px;
 }
 
 [data-theme='light'] .app-sidebar {
@@ -243,7 +260,7 @@ html, body {
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  padding: 0 12px;
+  padding: 0 4px;
 }
 
 .sidebar-nav-list {
@@ -611,7 +628,7 @@ html, body {
   border-left-color: var(--primary);
 }
 
-/* Footer & FAQ Grid */
+/* Footer & Vertical Downward FAQ Layout */
 .app-footer {
   background-color: var(--bg-footer);
   border-top: 1px solid var(--border);
@@ -636,16 +653,11 @@ html, body {
   gap: 10px;
 }
 
+/* Single Vertical Column Layout for FAQ */
 .faq-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 16px;
-}
-
-@media (min-width: 768px) {
-  .faq-grid {
-    grid-template-columns: 1fr 1fr;
-  }
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
 .faq-item {
@@ -709,7 +721,7 @@ html, body {
   color: var(--text-muted);
 }
 
-/* FAQ Locker Modal System */
+/* FAQ Modal System */
 .faq-modal-overlay {
   position: fixed;
   top: 0;
@@ -733,7 +745,7 @@ html, body {
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--border-hover);
   border-radius: var(--radius-lg);
-  max-width: 960px;
+  max-width: 860px;
   width: 100%;
   max-height: 85vh;
   display: flex;

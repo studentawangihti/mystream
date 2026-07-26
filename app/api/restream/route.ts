@@ -1,61 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { spawn, ChildProcess } from 'child_process';
 import fs from 'fs';
-import path from 'path';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+import { prisma } from '@/lib/prisma';
 
-// Define structures
-interface Destination {
-  id: string;
-  name: string;
-  rtmpUrl: string;
-  streamKey: string;
-  status: 'idle' | 'streaming' | 'error';
-  errorMsg?: string;
-  startedAt?: string;
-  logs: string[];
-}
-
-// Global persistence in development
+// Memory map for running FFmpeg child processes and in-memory log buffer
 const globalForRestream = global as typeof globalThis & {
   activeProcesses?: Map<string, ChildProcess>;
-  streamConfigs?: Destination[];
+  logBuffers?: Map<string, string[]>;
 };
 
 if (!globalForRestream.activeProcesses) {
   globalForRestream.activeProcesses = new Map();
 }
-if (!globalForRestream.streamConfigs) {
-  // Seed with default placeholder configuration
-  globalForRestream.streamConfigs = [
-    {
-      id: 'youtube',
-      name: 'YouTube Live',
-      rtmpUrl: 'rtmp://a.rtmp.youtube.com/live2',
-      streamKey: '',
-      status: 'idle',
-      logs: []
-    },
-    {
-      id: 'twitch',
-      name: 'Twitch TV',
-      rtmpUrl: 'rtmp://live.twitch.tv/app',
-      streamKey: '',
-      status: 'idle',
-      logs: []
-    }
-  ];
+if (!globalForRestream.logBuffers) {
+  globalForRestream.logBuffers = new Map();
 }
 
 const activeProcesses = globalForRestream.activeProcesses;
-const streamConfigs = globalForRestream.streamConfigs;
+const logBuffers = globalForRestream.logBuffers;
 
-// Detect local FFmpeg path
 function getFfmpegPath(): string {
   const paths = [
     'C:\\ffmpeg\\ffmpeg-master-latest-win64-gpl-shared\\bin\\ffmpeg.exe',
     'C:\\ffmpeg\\bin\\ffmpeg.exe',
     'C:\\ffmpeg\\ffmpeg.exe',
-    'ffmpeg' // fallback to PATH
+    'ffmpeg'
   ];
 
   for (const p of paths) {
@@ -66,55 +37,115 @@ function getFfmpegPath(): string {
   return 'ffmpeg';
 }
 
-export async function GET() {
-  // Sync status
-  for (const config of streamConfigs) {
-    if (config.status === 'streaming') {
-      const proc = activeProcesses.get(config.id);
-      if (!proc || proc.killed) {
-        config.status = 'idle';
-      }
-    }
+export async function GET(req: NextRequest) {
+  const session = await getServerSession(authOptions);
+  const userId = (session?.user as any)?.id;
+
+  if (!userId) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  // Fetch or seed default destinations for user
+  let userDestinations = await prisma.destination.findMany({
+    where: { userId },
+  });
+
+  if (userDestinations.length === 0) {
+    userDestinations = await prisma.$transaction([
+      prisma.destination.create({
+        data: {
+          userId,
+          name: 'YouTube Live',
+          rtmpUrl: 'rtmp://a.rtmp.youtube.com/live2',
+          streamKey: '',
+          status: 'idle',
+        },
+      }),
+      prisma.destination.create({
+        data: {
+          userId,
+          name: 'Twitch TV',
+          rtmpUrl: 'rtmp://live.twitch.tv/app',
+          streamKey: '',
+          status: 'idle',
+        },
+      }),
+    ]);
+  }
+
+  // Sync process running state
+  const formatted = userDestinations.map((d) => {
+    const isRunning = activeProcesses.has(d.id);
+    return {
+      id: d.id,
+      name: d.name,
+      rtmpUrl: d.rtmpUrl,
+      streamKey: d.streamKey,
+      status: isRunning ? 'streaming' : (d.status === 'streaming' ? 'idle' : d.status),
+      errorMsg: d.errorMsg || '',
+      logs: logBuffers.get(d.id) || [],
+    };
+  });
+
   return NextResponse.json({
-    destinations: streamConfigs,
-    ffmpegPath: getFfmpegPath()
+    destinations: formatted,
+    ffmpegPath: getFfmpegPath(),
   });
 }
 
 export async function POST(req: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+    const userId = (session?.user as any)?.id;
+
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const body = await req.json();
-    const { action, id, destinations, name, rtmpUrl, streamKey } = body;
+    const { action, id, destinations } = body;
 
-    // 1. UPDATE/SAVE Configurations
+    // 1. SAVE DESTINATIONS
     if (action === 'save_destinations' && Array.isArray(destinations)) {
-      // Clear existing configuration items that are not active
-      const runningIds = new Set(activeProcesses.keys());
+      // Upsert user destinations in database
+      const updatedList = [];
       
-      // Update or replace configurations
-      // Keep running ones unchanged status-wise, merge values
-      const newConfigs = destinations.map((d: any) => {
-        const existing = streamConfigs.find(c => c.id === d.id);
-        const isRunning = runningIds.has(d.id);
+      for (const d of destinations) {
+        let saved;
+        if (d.id && !d.id.startsWith('custom_')) {
+          saved = await prisma.destination.update({
+            where: { id: d.id },
+            data: {
+              name: d.name || 'Unnamed Platform',
+              rtmpUrl: d.rtmpUrl || '',
+              streamKey: d.streamKey || '',
+            },
+          });
+        } else {
+          saved = await prisma.destination.create({
+            data: {
+              userId,
+              name: d.name || 'Platform Kustom',
+              rtmpUrl: d.rtmpUrl || '',
+              streamKey: d.streamKey || '',
+              status: 'idle',
+            },
+          });
+        }
+        
+        const isRunning = activeProcesses.has(saved.id);
+        updatedList.push({
+          id: saved.id,
+          name: saved.name,
+          rtmpUrl: saved.rtmpUrl,
+          streamKey: saved.streamKey,
+          status: isRunning ? 'streaming' : saved.status,
+          errorMsg: saved.errorMsg || '',
+          logs: logBuffers.get(saved.id) || [],
+        });
+      }
 
-        return {
-          id: d.id,
-          name: d.name || 'Unnamed Platform',
-          rtmpUrl: d.rtmpUrl || '',
-          streamKey: d.streamKey || '',
-          status: isRunning ? 'streaming' : (existing ? existing.status : 'idle'),
-          errorMsg: existing?.errorMsg || '',
-          startedAt: existing?.startedAt,
-          logs: existing?.logs || []
-        } as Destination;
-      });
-
-      streamConfigs.length = 0;
-      streamConfigs.push(...newConfigs);
-
-      return NextResponse.json({ success: true, destinations: streamConfigs });
+      return NextResponse.json({ success: true, destinations: updatedList });
     }
 
     // 2. START RESTREAMING
@@ -122,32 +153,23 @@ export async function POST(req: NextRequest) {
       const { ingestKey } = body;
       const finalIngestKey = ingestKey || 'test';
       const ffmpegPath = getFfmpegPath();
-      console.log(`Starting restream with FFmpeg: ${ffmpegPath} (Ingest Key: ${finalIngestKey})`);
+
+      const userDestinations = await prisma.destination.findMany({
+        where: { userId },
+      });
 
       let startedCount = 0;
       const errors: string[] = [];
 
-      for (const config of streamConfigs) {
-        // Skip if empty URL/key, or if already streaming
-        if (!config.rtmpUrl || !config.streamKey) {
-          continue;
-        }
-
-        if (activeProcesses.has(config.id)) {
-          console.log(`Platform ${config.id} is already streaming.`);
-          continue;
-        }
+      for (const dest of userDestinations) {
+        if (!dest.rtmpUrl || !dest.streamKey) continue;
+        if (activeProcesses.has(dest.id)) continue;
 
         try {
-          // Construct target URL
-          let targetUrl = config.rtmpUrl;
-          if (!targetUrl.endsWith('/')) {
-            targetUrl += '/';
-          }
-          targetUrl += config.streamKey;
+          let targetUrl = dest.rtmpUrl;
+          if (!targetUrl.endsWith('/')) targetUrl += '/';
+          targetUrl += dest.streamKey;
 
-          // Spawn FFmpeg process
-          // Command: ffmpeg -i rtmp://localhost:1935/live/<ingestKey> -c copy -f flv <destination>
           const args = [
             '-i', `rtmp://localhost:1935/live/${finalIngestKey}`,
             '-c', 'copy',
@@ -155,81 +177,91 @@ export async function POST(req: NextRequest) {
             targetUrl
           ];
 
-          console.log(`Spawning FFmpeg for ${config.name}: ${ffmpegPath} ${args.join(' ')}`);
-          
-          const proc = spawn(ffmpegPath, args, {
-            stdio: ['ignore', 'pipe', 'pipe'],
-            detached: false
-          });
+          const proc = spawn(ffmpegPath, args, { stdio: ['ignore', 'pipe', 'pipe'] });
 
-          config.status = 'streaming';
-          config.startedAt = new Date().toISOString();
-          config.errorMsg = undefined;
-          config.logs = [`[System] Spawned FFmpeg process for ${config.name} (PID: ${proc.pid})`];
+          if (!logBuffers.has(dest.id)) {
+            logBuffers.set(dest.id, []);
+          }
+          const currentLogs = logBuffers.get(dest.id)!;
+          currentLogs.push(`[System] Spawned FFmpeg process for ${dest.name} (PID: ${proc.pid})`);
 
-          // Capture stdout
           proc.stdout?.on('data', (data) => {
             const lines = data.toString().split('\n');
             lines.forEach((line: string) => {
               if (line.trim()) {
-                config.logs.push(`[STDOUT] ${line.trim()}`);
-                if (config.logs.length > 50) config.logs.shift();
+                currentLogs.push(`[STDOUT] ${line.trim()}`);
+                if (currentLogs.length > 50) currentLogs.shift();
               }
             });
           });
 
-          // Capture stderr (FFmpeg outputs statistics and status here)
           proc.stderr?.on('data', (data) => {
             const lines = data.toString().split('\n');
             lines.forEach((line: string) => {
               if (line.trim()) {
-                config.logs.push(line.trim());
-                if (config.logs.length > 50) config.logs.shift();
+                currentLogs.push(line.trim());
+                if (currentLogs.length > 50) currentLogs.shift();
               }
             });
           });
 
-          // Handle process exit
-          proc.on('close', (code) => {
-            console.log(`FFmpeg for ${config.name} exited with code ${code}`);
-            activeProcesses.delete(config.id);
-            config.status = code === 0 || code === null ? 'idle' : 'error';
-            if (code !== 0 && code !== null) {
-              config.errorMsg = `FFmpeg exited with code ${code}`;
-            }
-            config.logs.push(`[System] FFmpeg exited with code ${code}`);
+          proc.on('close', async (code) => {
+            activeProcesses.delete(dest.id);
+            const status = code === 0 || code === null ? 'idle' : 'error';
+            await prisma.destination.update({
+              where: { id: dest.id },
+              data: {
+                status,
+                errorMsg: code !== 0 && code !== null ? `FFmpeg exited with code ${code}` : null,
+              },
+            });
+            currentLogs.push(`[System] FFmpeg exited with code ${code}`);
           });
 
-          proc.on('error', (err) => {
-            console.error(`FFmpeg error for ${config.name}:`, err);
-            activeProcesses.delete(config.id);
-            config.status = 'error';
-            config.errorMsg = err.message;
-            config.logs.push(`[Error] ${err.message}`);
+          proc.on('error', async (err) => {
+            activeProcesses.delete(dest.id);
+            await prisma.destination.update({
+              where: { id: dest.id },
+              data: { status: 'error', errorMsg: err.message },
+            });
+            currentLogs.push(`[Error] ${err.message}`);
           });
 
-          activeProcesses.set(config.id, proc);
+          activeProcesses.set(dest.id, proc);
+          await prisma.destination.update({
+            where: { id: dest.id },
+            data: { status: 'streaming', errorMsg: null },
+          });
+
           startedCount++;
         } catch (err: any) {
-          console.error(`Failed to start FFmpeg for ${config.name}:`, err);
-          config.status = 'error';
-          config.errorMsg = err.message;
-          config.logs.push(`[Error] Failed to spawn process: ${err.message}`);
-          errors.push(`${config.name}: ${err.message}`);
+          errors.push(`${dest.name}: ${err.message}`);
         }
       }
+
+      const refreshed = await prisma.destination.findMany({ where: { userId } });
+      const formatted = refreshed.map((d) => ({
+        id: d.id,
+        name: d.name,
+        rtmpUrl: d.rtmpUrl,
+        streamKey: d.streamKey,
+        status: activeProcesses.has(d.id) ? 'streaming' : d.status,
+        errorMsg: d.errorMsg || '',
+        logs: logBuffers.get(d.id) || [],
+      }));
 
       return NextResponse.json({
         success: errors.length === 0,
         startedCount,
         errors,
-        destinations: streamConfigs
+        destinations: formatted,
       });
     }
 
     // 3. STOP RESTREAMING
     if (action === 'stop') {
-      const { targetId } = body; // Optional: stop specific, or stop all if not provided
+      const { targetId } = body;
+      const userDestinations = await prisma.destination.findMany({ where: { userId } });
 
       if (targetId) {
         const proc = activeProcesses.get(targetId);
@@ -237,42 +269,55 @@ export async function POST(req: NextRequest) {
           proc.kill('SIGTERM');
           activeProcesses.delete(targetId);
         }
-        const config = streamConfigs.find(c => c.id === targetId);
-        if (config) {
-          config.status = 'idle';
-          config.logs.push('[System] Stream stopped manually by user');
-        }
+        await prisma.destination.update({
+          where: { id: targetId },
+          data: { status: 'idle' },
+        });
       } else {
-        // Stop all
-        for (const [id, proc] of activeProcesses.entries()) {
-          proc.kill('SIGTERM');
-          activeProcesses.delete(id);
-        }
-        for (const config of streamConfigs) {
-          if (config.status === 'streaming') {
-            config.status = 'idle';
-            config.logs.push('[System] Stream stopped manually by user');
+        for (const dest of userDestinations) {
+          const proc = activeProcesses.get(dest.id);
+          if (proc) {
+            proc.kill('SIGTERM');
+            activeProcesses.delete(dest.id);
           }
         }
+        await prisma.destination.updateMany({
+          where: { userId },
+          data: { status: 'idle' },
+        });
       }
 
-      return NextResponse.json({ success: true, destinations: streamConfigs });
+      const refreshed = await prisma.destination.findMany({ where: { userId } });
+      const formatted = refreshed.map((d) => ({
+        id: d.id,
+        name: d.name,
+        rtmpUrl: d.rtmpUrl,
+        streamKey: d.streamKey,
+        status: activeProcesses.has(d.id) ? 'streaming' : 'idle',
+        errorMsg: d.errorMsg || '',
+        logs: logBuffers.get(d.id) || [],
+      }));
+
+      return NextResponse.json({ success: true, destinations: formatted });
     }
 
     // 4. GET LOGS
     if (action === 'get_logs' && id) {
-      const config = streamConfigs.find(c => c.id === id);
+      const dest = await prisma.destination.findUnique({ where: { id } });
+      const logs = logBuffers.get(id) || [];
+      const isRunning = activeProcesses.has(id);
+
       return NextResponse.json({
         id,
-        logs: config ? config.logs : [],
-        status: config ? config.status : 'idle',
-        errorMsg: config ? config.errorMsg : ''
+        logs,
+        status: isRunning ? 'streaming' : (dest?.status || 'idle'),
+        errorMsg: dest?.errorMsg || '',
       });
     }
 
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
   } catch (error: any) {
-    console.error('Error in restream API:', error);
+    console.error('Restream API Error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

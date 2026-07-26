@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
+import { useSession, signOut } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
 import { 
   Tv, 
   Plus, 
@@ -26,7 +28,9 @@ import {
   FileText,
   X,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  LogOut,
+  User
 } from 'lucide-react';
 
 interface Destination {
@@ -68,8 +72,11 @@ const faqData: FAQItem[] = [
 ];
 
 export default function Dashboard() {
+  const { data: session, status: sessionStatus } = useSession();
+  const router = useRouter();
+
   const [destinations, setDestinations] = useState<Destination[]>([]);
-  const [selectedDestId, setSelectedDestId] = useState<string>('youtube');
+  const [selectedDestId, setSelectedDestId] = useState<string>('');
   const [logs, setLogs] = useState<string[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [actionLoading, setActionLoading] = useState<boolean>(false);
@@ -90,15 +97,20 @@ export default function Dashboard() {
 
   const logContainerRef = useRef<HTMLDivElement>(null);
 
+  // Redirect to login if unauthenticated
+  useEffect(() => {
+    if (sessionStatus === 'unauthenticated') {
+      router.push('/login');
+    }
+  }, [sessionStatus, router]);
+
   // Auto-hide header when scrolling down
   useEffect(() => {
     const handleScroll = () => {
       const currentScrollY = window.scrollY;
       if (currentScrollY > 60 && currentScrollY > lastScrollY) {
-        // Scroll DOWN -> hide header
         setShowHeader(false);
       } else {
-        // Scroll UP or near top -> show header
         setShowHeader(true);
       }
       setLastScrollY(currentScrollY);
@@ -162,6 +174,7 @@ export default function Dashboard() {
 
   // 1. Fetch Configuration & Status
   const fetchData = async () => {
+    if (sessionStatus !== 'authenticated') return;
     try {
       const res = await fetch('/api/restream');
       const data = await res.json();
@@ -183,14 +196,14 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [sessionStatus]);
 
   // 2. Poll Logs for the selected destination if streaming/error
   useEffect(() => {
     let interval: NodeJS.Timeout;
-    
+    if (sessionStatus !== 'authenticated' || !selectedDestId) return;
+
     const fetchLogs = async () => {
-      if (!selectedDestId) return;
       try {
         const res = await fetch('/api/restream', {
           method: 'POST',
@@ -218,7 +231,7 @@ export default function Dashboard() {
     return () => {
       clearInterval(interval);
     };
-  }, [selectedDestId]);
+  }, [selectedDestId, sessionStatus]);
 
   // Scroll to bottom of logs safely without moving whole window
   useEffect(() => {
@@ -378,7 +391,7 @@ export default function Dashboard() {
     }
   };
 
-  if (loading) {
+  if (sessionStatus === 'loading' || (sessionStatus === 'authenticated' && loading)) {
     return (
       <div style={{ display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center', backgroundColor: '#06060a' }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
@@ -393,6 +406,10 @@ export default function Dashboard() {
         `}} />
       </div>
     );
+  }
+
+  if (sessionStatus === 'unauthenticated') {
+    return null;
   }
 
   return (
@@ -421,6 +438,27 @@ export default function Dashboard() {
               <span>Active Targets:</span>
               <span className="telemetry-chip-val">{activeStreamsCount} / {destinations.length}</span>
             </div>
+          </div>
+
+          {/* User Profile Pill & Sign Out */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'rgba(255,255,255,0.04)', padding: '4px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: '700', fontSize: '0.8rem' }}>
+                {session?.user?.name ? session.user.name[0].toUpperCase() : 'U'}
+              </div>
+              <span style={{ fontSize: '0.85rem', fontWeight: '700', color: 'var(--text-primary)' }}>
+                {session?.user?.name || 'Studio User'}
+              </span>
+            </div>
+
+            <button
+              className="btn btn-secondary"
+              onClick={() => signOut({ callbackUrl: '/login' })}
+              style={{ padding: '4px 8px', fontSize: '0.75rem' }}
+              title="Keluar / Sign Out"
+            >
+              <LogOut size={14} /> Keluar
+            </button>
           </div>
 
           {/* Theme Selector */}

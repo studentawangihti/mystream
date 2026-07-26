@@ -1,0 +1,88 @@
+================================================================================
+           MYSTREAM STUDIO - DOKUMEN WORKFLOW & RENCANA IMPLEMENTASI
+                        SISTEM KEANGGOTAAN FREE VS PRO
+================================================================================
+
+[ 1. ASUMSI INFRASTRUKTUR & KAPASITAS SERVER ]
+--------------------------------------------------------------------------------
+* Kecepatan Internet Upload : 500 Mbps Upload (Rp 550.000 / bulan)
+* Effective Dedicated Upload : 450 Mbps (setelah Safety Buffer 10%)
+* Mode Penyiaran            : Stream Pass-Through (-c copy) -> Zero Transcoding CPU
+* Konsumsi Bandwidth Free   : 12 Mbps per user (1080p60 @ 6 Mbps x 2 Platform)
+* Konsumsi Bandwidth Pro    : 28 Mbps per user (1080p60 @ 7 Mbps x 4 Platform)
+* Kapasitas Simultan Live   : ~37 User Free Live Bersamaan ATAU ~16 User Pro Live
+
+
+[ 2. MATRIKS SPESIFIKASI DUA TIER KEANGGOTAAN (FREE VS PRO) ]
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+PARAMETIR / FITUR          | FREE PLAN (Ramah & Terjangkau)| PRO MEMBER (VIP & Unlimited)
+--------------------------------------------------------------------------------
+Harga Sewa / Bulan         | Rp 0 / bulan                 | Rp 49.000 / bulan
+Jumlah Target Platform     | Maksimal 2 Platform          | Maksimal 5 Platform
+                           | (misal YouTube + Twitch)     | (YouTube, Twitch, FB, TikTok, Custom)
+Batas Resolusi Video       | Full HD 1080p (1920x1080)    | Super Ultra HD 4K (3840x2160)
+Batas Frame Rate (FPS)     | Max 60 FPS                   | Max 60 FPS
+Batas Video Bitrate        | Max 8.000 Kbps (8.0 Mbps)    | Max 35.000 Kbps (35.0 Mbps)
+Batas Durasi Sesi Live     | Max 4 Jam per Sesi Live      | Unlimited (Non-Stop 24/7)
+Kuota Reset Stream Key     | 1x per 24 Jam                | Unlimited Kapan Saja
+Tampilan Badge Profil UI   | FREE PLAN (Neutral Badge)    | PRO MEMBER (Glow Indigo-Gold)
+--------------------------------------------------------------------------------
+
+
+[ 3. MEKANISME TEKNIS PROTEKSI BANDWIDTH & AUTO-REJECT ]
+--------------------------------------------------------------------------------
+1. DETEKSI RESOLUSI OTOMATIS:
+   - Sinyal OBS masuk ke server MediaMTX.
+   - FFmpeg membaca metadata stream pada baris log pertama:
+     "Stream #0:0: Video: h264, yuv420p, 1920x1080 [DAR 16:9], 60 fps"
+   - Backend membaca nilai "1920x1080" atau "3840x2160" secara otomatis dalam 0.5 detik.
+
+2. PENOLAKAN OTOMATIS (AUTO-REJECT):
+   - Jika user berstatus FREE PLAN dan mendeteksi resolusi > 1080p (misal 4K):
+     -> Backend seketika menghentikan proses FFmpeg (Auto-Kill) dalam 0.5 detik.
+     -> UI Dashboard & Log menampilkan pesan error penolakan ramah:
+        "Resolusi OBS Anda (4K 3840x2160) melebihi batas Free Plan (Max 1080p).
+         Silakan ubah Output Resolution di OBS ke 1080p atau upgrade ke Pro Plan!"
+
+3. DETEKSI & THROTTLING BITRATE:
+   - FFmpeg log parser membaca bitrate real-time: "bitrate=8500.0kbits/s".
+   - Jika user FREE PLAN melebihi 8.000 Kbps, backend memberi peringatan di UI
+     dan menerapkan limiter paket "-maxrate 8000k -bufsize 16000k".
+
+4. AUTO-STOP DURASI LIVE 4 JAM:
+   - Backend memantau timer live: "time=04:00:00".
+   - Jika user FREE PLAN mencapai durasi 4 jam, proses FFmpeg dihentikan secara
+     otomatis dan mengembalikan status ke 'idle'.
+
+
+[ 4. LANGKAH-LANGKAH TEKNIS IMPLEMENTASI KODE ]
+--------------------------------------------------------------------------------
+LANGKAH 1: PERBAIKAN SCHEMA DATABASE (prisma/schema.prisma)
+  - Menambahkan field 'plan String @default("free")' ke model User.
+  - Jalankan 'npx prisma db push --force-reset' dan 'npx prisma generate'.
+
+LANGKAH 2: METADATA SESI USER (app/api/auth/[...nextauth]/route.ts & register)
+  - Menambahkan 'plan: user.plan' ke dalam JWT token dan Session Callback.
+  - Menjadikan 'plan: "free"' sebagai default saat pendaftaran user baru.
+
+LANGKAH 3: PENGUNCIAN ATURAN BACKEND (app/api/restream/route.ts)
+  - Membatasi penambahan platform (Free = Max 2, Pro = Max 5).
+  - Menambahkan pemeriksa metadata log resolusi (> 1080p auto-reject untuk Free).
+  - Menambahkan timer pembatas durasi 4 jam untuk Free Plan.
+
+LANGKAH 4: ANTARMUKA DASHBOARD WEB (app/page.tsx)
+  - Tampilkan Badge Profil Header 'FREE PLAN' vs 'PRO MEMBER 💎'.
+  - Update logika tombol '+ Tambah Platform' (modal peringatan jika Free > 2).
+  - Update indikator kartu Analitik (Menampilkan batas 2 Platform, 1080p, 8Mbps, 4 Jam).
+
+
+[ 5. SIMULASI POTENSI BISNIS BULANAN ]
+--------------------------------------------------------------------------------
+* Asumsi Pendaftar Terdaftar  : 100 User
+* Target User Pro Berlangganan: 20 User (x Rp 49.000 / bulan)
+* Total Pendapatan Bulanan    : Rp 980.000 / bulan
+* Biaya Internet 500 Mbps     : Rp 550.000 / bulan
+--------------------------------------------------------------------------------
+* KEUNTUNGAN BERSIH (PROFIT)   : + Rp 430.000 / bulan (Internet Rumah 100% Gratis!)
+================================================================================

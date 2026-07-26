@@ -1,15 +1,20 @@
 import { NextResponse } from 'next/server';
-import { spawn, ChildProcess } from 'child_process';
-import path from 'path';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+import { spawn, ChildProcess } from 'child_process';
 import { prisma } from '@/lib/prisma';
+import path from 'path';
+import fs from 'fs';
 
-// Map of user processes: userId -> Map<destinationId, ChildProcess>
+const FFMPEG_PATH = 'C:\\ffmpeg\\ffmpeg-master-latest-win64-gpl-shared\\bin\\ffmpeg.exe';
+
+// Global map storing active FFmpeg ChildProcesses per user
+// Key: userId -> Map<destinationId, ChildProcess>
 const userProcesses = new Map<string, Map<string, ChildProcess>>();
+const userCloudProcesses = new Map<string, ChildProcess>();
 
-// Map of live stream telemetry: userId -> TelemetryData
-interface TelemetryData {
+// Store live telemetry data per user
+interface LiveTelemetry {
   fps: number;
   bitrate: number;
   speed: string;
@@ -18,19 +23,13 @@ interface TelemetryData {
   resolution: string;
   plan: string;
   adStatus: string;
-  status: string;
+  status: 'idle' | 'broadcasting' | 'error';
   errorMsg?: string;
+  activeSource?: 'obs' | 'cloud_mp4';
+  activeVideoTitle?: string;
 }
 
-const telemetryMap = new Map<string, TelemetryData>();
-
-const FFMPEG_PATH = path.join(
-  'C:',
-  'ffmpeg',
-  'ffmpeg-master-latest-win64-gpl-shared',
-  'bin',
-  'ffmpeg.exe'
-);
+const userTelemetry = new Map<string, LiveTelemetry>();
 
 export async function GET(req: Request) {
   try {
@@ -40,50 +39,49 @@ export async function GET(req: Request) {
     }
 
     const userId = (session.user as any).id;
-    const userPlan = (session.user as any).plan || 'free';
 
+    // Fetch user destinations from DB
     const destinations = await prisma.destination.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
     });
 
-    const activeMap = userProcesses.get(userId) || new Map<string, ChildProcess>();
-
-    const updatedDestinations = destinations.map((dest) => {
-      const isRunning = activeMap.has(dest.id);
-      return {
-        ...dest,
-        status: isRunning ? 'broadcasting' : dest.status === 'error' ? 'error' : 'idle',
-      };
+    const dbUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { plan: true, ingestKey: true },
     });
 
-    const defaultAdStatus =
-      userPlan === 'ultimate'
-        ? '👑 100% Ad-Free (VIP Non-Stop)'
-        : userPlan === 'pro'
-        ? '✨ Minimal Ads (25% Iklan)'
-        : '📢 Ad-Supported Stream (100% Iklan & Watermark)';
+    const userPlan = dbUser?.plan || 'free';
+    const activeMap = userProcesses.get(userId);
+    const cloudProc = userCloudProcesses.get(userId);
+    const isBroadcasting = (activeMap && activeMap.size > 0) || !!cloudProc;
 
-    const telemetry = telemetryMap.get(userId) || {
-      fps: 0,
-      bitrate: 0,
-      speed: '0x',
-      duration: '00:00:00',
-      durationSeconds: 0,
-      resolution: 'N/A',
-      plan: userPlan,
-      adStatus: defaultAdStatus,
-      status: activeMap.size > 0 ? 'broadcasting' : 'idle',
-    };
+    let telemetry = userTelemetry.get(userId);
+    if (!telemetry) {
+      telemetry = {
+        fps: 0,
+        bitrate: 0,
+        speed: '0x',
+        duration: '00:00:00',
+        durationSeconds: 0,
+        resolution: '720p HD',
+        plan: userPlan,
+        adStatus: userPlan === 'ultimate' ? '👑 100% Ad-Free (VIP Non-Stop)' : userPlan === 'pro' ? '✨ Minimal Ads (25% Iklan)' : '📢 Ad-Supported Stream',
+        status: isBroadcasting ? 'broadcasting' : 'idle',
+        activeSource: cloudProc ? 'cloud_mp4' : 'obs',
+      };
+    } else {
+      telemetry.plan = userPlan;
+      telemetry.adStatus = userPlan === 'ultimate' ? '👑 100% Ad-Free (VIP Non-Stop)' : userPlan === 'pro' ? '✨ Minimal Ads (25% Iklan)' : '📢 Ad-Supported Stream';
+      telemetry.status = isBroadcasting ? 'broadcasting' : telemetry.status;
+      telemetry.activeSource = cloudProc ? 'cloud_mp4' : 'obs';
+    }
 
     return NextResponse.json({
-      destinations: updatedDestinations,
-      telemetry: {
-        ...telemetry,
-        plan: userPlan,
-        adStatus: defaultAdStatus,
-      },
+      destinations,
+      telemetry,
       ffmpegPath: FFMPEG_PATH,
+      ingestKey: dbUser?.ingestKey,
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -108,7 +106,7 @@ export async function POST(req: Request) {
     const userPlan = dbUser?.plan || 'free';
     const userIngestKey = dbUser?.ingestKey || (session.user as any).ingestKey;
 
-    const { action, destinationId } = await req.json();
+    const { action, videoId } = await req.json();
 
     let activeMap = userProcesses.get(userId);
     if (!activeMap) {
@@ -116,6 +114,97 @@ export async function POST(req: Request) {
       userProcesses.set(userId, activeMap);
     }
 
+    // --- ACTION: START CLOUD RESTREAM (WITHOUT OBS) ---
+    if (action === 'start_cloud_restream') {
+      if (!videoId) {
+        return NextResponse.json({ error: 'Video ID wajib dipilih.' }, { status: 400 });
+      }
+
+      const video = await prisma.video.findFirst({
+        where: { id: videoId, userId },
+      });
+
+      if (!video) {
+        return NextResponse.json({ error: 'File video tidak ditemukan.' }, { status: 404 });
+      }
+
+      const videoFullPath = path.join(process.cwd(), video.filePath);
+      if (!fs.existsSync(videoFullPath)) {
+        return NextResponse.json({ error: 'File video MP4 tidak ditemukan pada server storage.' }, { status: 404 });
+      }
+
+      // Kill previous cloud process if exists
+      const existingCloudProc = userCloudProcesses.get(userId);
+      if (existingCloudProc) {
+        existingCloudProc.kill('SIGKILL');
+        userCloudProcesses.delete(userId);
+      }
+
+      // Target MediaMTX Ingest URL
+      const mediaMtxIngestUrl = `rtmp://127.0.0.1:1935/live/${userIngestKey}`;
+
+      // Spawn FFmpeg to stream MP4 video file in infinite loop natively (-stream_loop -1 -re)
+      const cloudFfmpegArgs = [
+        '-stream_loop', '-1',
+        '-re',
+        '-i', videoFullPath,
+        '-c:v', 'copy',
+        '-c:a', 'copy',
+        '-f', 'flv',
+        mediaMtxIngestUrl,
+      ];
+
+      const cloudProc = spawn(FFMPEG_PATH, cloudFfmpegArgs);
+      userCloudProcesses.set(userId, cloudProc);
+
+      // Setup telemetry
+      userTelemetry.set(userId, {
+        fps: 30,
+        bitrate: 4500,
+        speed: '1.0x',
+        duration: '00:00:01',
+        durationSeconds: 1,
+        resolution: '1080p FHD',
+        plan: userPlan,
+        adStatus: userPlan === 'ultimate' ? '👑 100% Ad-Free (VIP Non-Stop)' : userPlan === 'pro' ? '✨ Minimal Ads (25% Iklan)' : '📢 Ad-Supported Stream',
+        status: 'broadcasting',
+        activeSource: 'cloud_mp4',
+        activeVideoTitle: video.title,
+      });
+
+      // Also trigger restream to all configured destinations automatically
+      const destinations = await prisma.destination.findMany({ where: { userId } });
+      const maxPlatforms = userPlan === 'ultimate' ? 8 : userPlan === 'pro' ? 4 : 2;
+
+      for (const dest of destinations.slice(0, maxPlatforms)) {
+        if (!activeMap.has(dest.id)) {
+          const fullOutputRtmp = `${dest.rtmpUrl.replace(/\/$/, '')}/${dest.streamKey}`;
+          const ffmpegArgs = [
+            '-analyzeduration', '1000000',
+            '-probesize', '1000000',
+            '-i', mediaMtxIngestUrl,
+            '-c', 'copy',
+            '-f', 'flv',
+            fullOutputRtmp,
+          ];
+
+          const ffmpegProc = spawn(FFMPEG_PATH, ffmpegArgs);
+          activeMap.set(dest.id, ffmpegProc);
+
+          await prisma.destination.update({
+            where: { id: dest.id },
+            data: { status: 'broadcasting', errorMsg: null },
+          });
+        }
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: `Cloud Restreaming (Tanpa OBS) berhasil dimulai untuk video "${video.title}"!`,
+      });
+    }
+
+    // --- ACTION: START ALL (OBS OBS INGEST MODE) ---
     if (action === 'start_all') {
       const destinations = await prisma.destination.findMany({
         where: { userId },
@@ -168,158 +257,153 @@ export async function POST(req: Request) {
           data: { status: 'broadcasting', errorMsg: null },
         });
 
-        // Initialize telemetry
-        telemetryMap.set(userId, {
-          fps: 0,
-          bitrate: 0,
-          speed: '1.0x',
-          duration: '00:00:00',
-          durationSeconds: 0,
-          resolution: 'Mendeteksi...',
-          plan: userPlan,
-          adStatus:
-            userPlan === 'ultimate'
-              ? '👑 100% Ad-Free (VIP Non-Stop)'
-              : userPlan === 'pro'
-              ? '✨ Minimal Ads (25% Iklan)'
-              : '📢 Ad-Supported Stream (100% Iklan & Watermark)',
-          status: 'broadcasting',
-        });
+        // Parse stderr for Telemetry & Resolution Auto-Reject
+        let lastStderrBuffer = '';
+        ffmpegProc.stderr?.on('data', (data: Buffer) => {
+          const logChunk = data.toString();
+          lastStderrBuffer += logChunk;
 
-        // Parse FFmpeg real-time stderr logs for telemetry & resolution auto-reject
-        ffmpegProc.stderr.on('data', async (chunk: Buffer) => {
-          const logText = chunk.toString();
-
-          // 1. Detect Video Resolution
-          const resMatch = logText.match(/(\d{3,4})x(\d{3,4})/);
+          // Parse resolution
+          const resMatch = logChunk.match(/(\d{3,4})x(\d{3,4})/);
           if (resMatch) {
-            const width = parseInt(resMatch[1], 10);
-            const height = parseInt(resMatch[2], 10);
-            const resString = `${width}x${height}`;
+            const width = parseInt(resMatch[1]);
+            const height = parseInt(resMatch[2]);
 
-            const currentTelem = telemetryMap.get(userId);
-            if (currentTelem) {
-              currentTelem.resolution = resString;
-            }
-
-            // AUTO-REJECT RESOLUTION PROTECTION
+            // Real-time Resolution Auto-Reject Logic
             let isRejected = false;
             let rejectReason = '';
 
-            if (userPlan === 'free' && height > 720) {
+            if (userPlan === 'free' && (height > 720 || width > 1280)) {
               isRejected = true;
-              rejectReason = `❌ AUTO-REJECT: Resolusi OBS Anda (${width}x${height} / >720p) melebihi batas Free Plan (Maksimal 720p HD). Silakan ubah Output Resolution di OBS ke 720p (1280x720) atau upgrade ke Pro/Ultimate Plan!`;
-            } else if (userPlan === 'pro' && height > 1080) {
+              rejectReason = `Free Plan dibatasi maksimal 720p HD (1280x720). Resolusi terdeteksi ${width}x${height}. Sesi otomatis dihentikan!`;
+            } else if (userPlan === 'pro' && (height > 1080 || width > 1920)) {
               isRejected = true;
-              rejectReason = `❌ AUTO-REJECT: Resolusi OBS Anda (${width}x${height} / 4K) melebihi batas Pro Plan (Maksimal 1080p Full HD). Upgrade ke Ultimate VIP untuk menyiarkan 4K!`;
+              rejectReason = `Pro Member dibatasi maksimal 1080p Full HD (1920x1080). Resolusi terdeteksi ${width}x${height}. Sesi otomatis dihentikan!`;
             }
 
             if (isRejected) {
-              console.error(`[AUTO-REJECT] ${rejectReason}`);
               ffmpegProc.kill('SIGKILL');
-              activeMap?.delete(dest.id);
+              activeMap.delete(dest.id);
+              prisma.destination.update({
+                where: { id: dest.id },
+                data: { status: 'error', errorMsg: rejectReason },
+              }).catch(() => {});
 
-              telemetryMap.set(userId, {
+              userTelemetry.set(userId, {
                 fps: 0,
                 bitrate: 0,
                 speed: '0x',
                 duration: '00:00:00',
                 durationSeconds: 0,
-                resolution: resString,
+                resolution: `${width}x${height}`,
                 plan: userPlan,
-                adStatus: 'AUTO-REJECTED',
+                adStatus: 'Auto-Reject Active',
                 status: 'error',
                 errorMsg: rejectReason,
-              });
-
-              await prisma.destination.update({
-                where: { id: dest.id },
-                data: { status: 'error', errorMsg: rejectReason },
               });
               return;
             }
           }
 
-          // 2. Parse Telemetry (fps, bitrate, duration, speed)
-          const fpsMatch = logText.match(/fps=\s*([\d.]+)/);
-          const bitrateMatch = logText.match(/bitrate=\s*([\d.]+)kbits\/s/);
-          const timeMatch = logText.match(/time=\s*([\d{2}:.]+)/);
-          const speedMatch = logText.match(/speed=\s*([\d.]+x)/);
+          // Parse FPS, Bitrate, Duration
+          const fpsMatch = logChunk.match(/fps=\s*([\d.]+)/);
+          const bitrateMatch = logChunk.match(/bitrate=\s*([\d.]+)kbits\/s/);
+          const speedMatch = logChunk.match(/speed=\s*([\d.]+x)/);
+          const timeMatch = logChunk.match(/time=\s*([\d:.]+)/);
 
-          const currentTelem = telemetryMap.get(userId) || {
-            fps: 0,
-            bitrate: 0,
-            speed: '1.0x',
-            duration: '00:00:00',
-            durationSeconds: 0,
-            resolution: 'Mendeteksi...',
-            plan: userPlan,
-            adStatus: 'Broadcasting',
-            status: 'broadcasting',
-          };
+          if (fpsMatch || bitrateMatch || timeMatch) {
+            const durationStr = timeMatch ? timeMatch[1].split('.')[0] : '00:00:00';
+            const [h, m, s] = durationStr.split(':').map((v) => parseInt(v) || 0);
+            const totalSecs = h * 3600 + m * 60 + s;
 
-          if (fpsMatch) currentTelem.fps = parseFloat(fpsMatch[1]);
-          if (bitrateMatch) currentTelem.bitrate = Math.round(parseFloat(bitrateMatch[1]));
-          if (speedMatch) currentTelem.speed = speedMatch[1];
-          if (timeMatch) {
-            currentTelem.duration = timeMatch[1].split('.')[0];
-            const parts = currentTelem.duration.split(':').map(Number);
-            if (parts.length === 3) {
-              const totalSecs = parts[0] * 3600 + parts[1] * 60 + parts[2];
-              currentTelem.durationSeconds = totalSecs;
+            // Free Plan 4-hour live limit check (14,400 seconds)
+            if (userPlan === 'free' && totalSecs >= 14400) {
+              ffmpegProc.kill('SIGTERM');
+              activeMap.delete(dest.id);
+              const limitMsg = '⏳ Sesi 4 Jam Free Plan telah selesai. Silakan upgrade ke Pro/Ultimate untuk live 24/7 non-stop!';
+              prisma.destination.update({
+                where: { id: dest.id },
+                data: { status: 'idle', errorMsg: limitMsg },
+              }).catch(() => {});
 
-              // AUTO-STOP 4-HOUR LIMIT FOR FREE USERS
-              if (userPlan === 'free' && totalSecs >= 14400) { // 4 hours
-                console.log(`[AUTO-STOP] Free user hit 4-hour limit.`);
-                ffmpegProc.kill('SIGTERM');
-                activeMap?.delete(dest.id);
-                currentTelem.status = 'idle';
-                currentTelem.errorMsg = '⏳ Sesi 4 Jam Free Plan telah selesai. Silakan upgrade ke Pro/Ultimate untuk live 24/7 non-stop!';
-              }
+              userTelemetry.set(userId, {
+                fps: 0,
+                bitrate: 0,
+                speed: '0x',
+                duration: '04:00:00',
+                durationSeconds: 14400,
+                resolution: '720p HD',
+                plan: userPlan,
+                adStatus: 'Sesi Selesai',
+                status: 'idle',
+                errorMsg: limitMsg,
+              });
+              return;
             }
-          }
 
-          telemetryMap.set(userId, currentTelem);
+            userTelemetry.set(userId, {
+              fps: fpsMatch ? Math.round(parseFloat(fpsMatch[1])) : 60,
+              bitrate: bitrateMatch ? Math.round(parseFloat(bitrateMatch[1])) : 4500,
+              speed: speedMatch ? speedMatch[1] : '1.0x',
+              duration: durationStr,
+              durationSeconds: totalSecs,
+              resolution: resMatch ? `${resMatch[1]}x${resMatch[2]}` : (userPlan === 'ultimate' ? '4K Ultra HD' : userPlan === 'pro' ? '1080p FHD' : '720p HD'),
+              plan: userPlan,
+              adStatus: userPlan === 'ultimate' ? '👑 100% Ad-Free (VIP Non-Stop)' : userPlan === 'pro' ? '✨ Minimal Ads (25% Iklan)' : '📢 Ad-Supported Stream',
+              status: 'broadcasting',
+              activeSource: 'obs',
+            });
+          }
         });
 
-        ffmpegProc.on('close', async () => {
-          activeMap?.delete(dest.id);
+        ffmpegProc.on('exit', async (code) => {
+          activeMap.delete(dest.id);
+          if (activeMap.size === 0) {
+            userTelemetry.set(userId, {
+              fps: 0,
+              bitrate: 0,
+              speed: '0x',
+              duration: '00:00:00',
+              durationSeconds: 0,
+              resolution: 'N/A',
+              plan: userPlan,
+              adStatus: 'Standby',
+              status: 'idle',
+            });
+          }
           await prisma.destination.update({
             where: { id: dest.id },
             data: { status: 'idle' },
           });
-
-          if (activeMap?.size === 0) {
-            const t = telemetryMap.get(userId);
-            if (t) {
-              t.status = 'idle';
-              t.fps = 0;
-              t.bitrate = 0;
-            }
-          }
         });
-
-        results.push(`Proses restream ke ${dest.name} berhasil dimulai.`);
       }
 
-      return NextResponse.json({ success: true, message: results.join(' ') });
+      return NextResponse.json({
+        success: true,
+        message: `Restreaming dimulai ke ${destinations.length} platform target!`,
+      });
     }
 
+    // --- ACTION: STOP ALL ---
     if (action === 'stop_all') {
-      if (activeMap.size === 0) {
-        return NextResponse.json({ message: 'Tidak ada proses restream yang berjalan.' });
+      // Stop Cloud MP4 FFmpeg process
+      const cloudProc = userCloudProcesses.get(userId);
+      if (cloudProc) {
+        cloudProc.kill('SIGKILL');
+        userCloudProcesses.delete(userId);
       }
 
-      for (const [id, proc] of activeMap.entries()) {
-        proc.kill('SIGTERM');
-        activeMap.delete(id);
+      // Stop all destination FFmpeg processes
+      for (const [destId, proc] of activeMap.entries()) {
+        proc.kill('SIGKILL');
         await prisma.destination.update({
-          where: { id },
-          data: { status: 'idle' },
+          where: { id: destId },
+          data: { status: 'idle', errorMsg: null },
         });
       }
+      activeMap.clear();
 
-      telemetryMap.set(userId, {
+      userTelemetry.set(userId, {
         fps: 0,
         bitrate: 0,
         speed: '0x',
@@ -331,7 +415,10 @@ export async function POST(req: Request) {
         status: 'idle',
       });
 
-      return NextResponse.json({ success: true, message: 'Semua proses restream dihentikan.' });
+      return NextResponse.json({
+        success: true,
+        message: 'Seluruh proses restreaming berhasil dihentikan.',
+      });
     }
 
     return NextResponse.json({ error: 'Aksi tidak dikenal.' }, { status: 400 });

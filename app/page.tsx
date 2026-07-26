@@ -41,7 +41,12 @@ import {
   Zap,
   ShieldCheck,
   KeyRound,
-  CheckCircle
+  CheckCircle,
+  UploadCloud,
+  FileVideo,
+  Film,
+  HardDrive,
+  PlayCircle
 } from 'lucide-react';
 
 interface Telemetry {
@@ -55,6 +60,8 @@ interface Telemetry {
   adStatus: string;
   status: string;
   errorMsg?: string;
+  activeSource?: 'obs' | 'cloud_mp4';
+  activeVideoTitle?: string;
 }
 
 interface Destination {
@@ -66,6 +73,16 @@ interface Destination {
   errorMsg?: string;
 }
 
+interface VideoRecord {
+  id: string;
+  title: string;
+  filename: string;
+  filePath: string;
+  sizeBytes: string;
+  durationSecs: number;
+  createdAt: string;
+}
+
 interface FAQItem {
   q: string;
   a: string;
@@ -73,24 +90,24 @@ interface FAQItem {
 
 const faqData: FAQItem[] = [
   {
+    q: "Bagaimana cara kerja Cloud Restreaming Tanpa OBS?",
+    a: "Anda cukup mengunggah file video berkategori MP4 ke Cloud Video Library akun Anda. Setelah itu, tekan tombol 'Mulai Cloud Restream (Tanpa OBS)'. Server MyStream akan menyiarkan video tersebut secara kontinyu (infinite loop 24/7) ke seluruh platform tujuan Anda tanpa perlu menggunakan OBS Studio atau menyalakan PC Anda!"
+  },
+  {
+    q: "Berapa batasan ukuran MB dan durasi menit video yang diunggah?",
+    a: "Batasan diatur berdasarkan plan keanggotaan Anda:\n• Free Plan: Maksimal 75 MB atau 20 Menit durasi video MP4.\n• Pro Member: Maksimal 1 GB (1.024 MB) atau 60 Menit (1 Jam) durasi video MP4.\n• Ultimate VIP: Maksimal 3 GB (3.072 MB) atau 300 Menit (5 Jam) durasi video MP4."
+  },
+  {
+    q: "Format file apa saja yang diizinkan untuk diunggah?",
+    a: "Hanya format video MP4 (.mp4 dengan MIME type video/mp4) yang diizinkan untuk menjaga kompatibilitas dan efisiensi pass-through hardware server."
+  },
+  {
     q: "Apa perbedaan antara Free Plan, Pro Member, dan Ultimate VIP?",
     a: "Free Plan mendukung hingga 2 platform target pada resolusi 720p HD dengan iklan & watermark. Pro Member (Rp 49rb/bln) mendukung hingga 4 platform target pada resolusi 1080p Full HD dengan 25% minimal iklan. Ultimate VIP (Rp 99rb/bln) mendukung hingga 8 platform target pada resolusi 4K Ultra HD 100% ad-free & watermark-free serta siaran 24/7 non-stop!"
   },
   {
-    q: "Kenapa siaran live saya langsung terhenti otomatis (Auto-Reject)?",
-    a: "Jika Anda menggunakan Free Plan dan mengirim resolusi di atas 720p (seperti 1080p atau 4K dari OBS), server backend MyStream secara otomatis melakukan Auto-Reject (Auto-Kill) dalam 0.5 detik untuk menjaga kapasitas bandwidth server. Silakan ubah Output Resolution di OBS ke 720p (1280x720) atau upgrade plan Anda."
-  },
-  {
     q: "Kenapa video preview loading hitam atau menampilkan error 'peer connection closed'?",
     a: "WebRTC didesain untuk real-time video (< 0.5s delay) dan tidak mendukung H.264 video streams yang memiliki B-frames. Pada OBS Studio Anda, buka Settings > Output > ubah Output Mode ke Advanced. Pada tab Streaming, ubah 'Max B-frames' menjadi 0 (untuk encoder NVENC/AMD) atau ketik 'bframes=0' / 'tune=zerolatency' di kolom x264 Options."
-  },
-  {
-    q: "Bagaimana cara melakukan konfigurasi OBS Studio ke sistem restreaming ini?",
-    a: "Buka OBS Settings > Stream. Pilih Service ke 'Custom...'. Isi Server URL dengan 'rtmp://restream.awgverse.io/live' dan isi Stream Key dengan key unik akun Anda (contoh: awg_live_xxx). Tekan Apply, lalu klik Start Streaming."
-  },
-  {
-    q: "Berapa banyak platform tujuan yang didukung?",
-    a: "Free Plan mendukung hingga 2 platform. Pro Member mendukung hingga 4 platform. Ultimate VIP mendukung hingga 8 platform sekaligus secara bersamaan (YouTube, Twitch, Facebook, TikTok, dsb)."
   }
 ];
 
@@ -112,6 +129,16 @@ export default function Dashboard() {
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('system');
   const [copiedServer, setCopiedServer] = useState<boolean>(false);
   const [copiedKey, setCopiedKey] = useState<boolean>(false);
+
+  // Video Upload & Cloud Restream States
+  const [userVideos, setUserVideos] = useState<VideoRecord[]>([]);
+  const [uploading, setUploading] = useState<boolean>(false);
+  const [uploadProgress, setUploadProgress] = useState<string>('');
+  const [uploadError, setUploadError] = useState<string>('');
+  const [uploadSuccess, setUploadSuccess] = useState<string>('');
+  const [selectedVideoFile, setSelectedVideoFile] = useState<File | null>(null);
+  const [videoTitleInput, setVideoTitleInput] = useState<string>('');
+  const [cloudRestreamLoadingId, setCloudRestreamLoadingId] = useState<string | null>(null);
 
   // Change password modal states
   const [isChangePassOpen, setIsChangePassOpen] = useState<boolean>(false);
@@ -208,8 +235,14 @@ export default function Dashboard() {
   const fetchData = async () => {
     if (sessionStatus !== 'authenticated') return;
     try {
-      const res = await fetch('/api/restream');
-      const data = await res.json();
+      const [restreamRes, videosRes] = await Promise.all([
+        fetch('/api/restream'),
+        fetch('/api/video/list'),
+      ]);
+
+      const data = await restreamRes.json();
+      const videoData = await videosRes.json();
+
       if (data.destinations) {
         setDestinations(data.destinations);
         if (data.destinations.length > 0 && !data.destinations.find((d: any) => d.id === selectedDestId)) {
@@ -221,6 +254,9 @@ export default function Dashboard() {
       }
       if (data.ffmpegPath) {
         setFfmpegPath(data.ffmpegPath);
+      }
+      if (videoData.videos) {
+        setUserVideos(videoData.videos);
       }
       setLoading(false);
     } catch (err) {
@@ -234,6 +270,98 @@ export default function Dashboard() {
     const interval = setInterval(fetchData, 3000);
     return () => clearInterval(interval);
   }, [sessionStatus, selectedDestId]);
+
+  // Handle Video Upload Submit
+  const handleUploadVideoSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setUploadError('');
+    setUploadSuccess('');
+
+    if (!selectedVideoFile) {
+      setUploadError('Silakan pilih file video .MP4 untuk diunggah.');
+      return;
+    }
+
+    setUploading(true);
+    setUploadProgress('Mengunggah file ke server storage...');
+
+    try {
+      const formData = new FormData();
+      formData.append('file', selectedVideoFile);
+      if (videoTitleInput) {
+        formData.append('title', videoTitleInput);
+      }
+
+      const res = await fetch('/api/video/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setUploadError(data.error || 'Gagal mengunggah video.');
+      } else {
+        setUploadSuccess(data.message);
+        setSelectedVideoFile(null);
+        setVideoTitleInput('');
+        fetchData();
+        setTimeout(() => setUploadSuccess(''), 4000);
+      }
+    } catch (err) {
+      setUploadError('Terjadi kesalahan koneksi saat mengunggah file.');
+    } finally {
+      setUploading(false);
+      setUploadProgress('');
+    }
+  };
+
+  // Delete Uploaded MP4 Video
+  const handleDeleteVideo = async (videoId: string, title: string) => {
+    if (!confirm(`Apakah Anda yakin ingin menghapus video "${title}" dari Cloud Library?`)) return;
+
+    try {
+      const res = await fetch('/api/video/list', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ videoId }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || 'Gagal menghapus video.');
+      } else {
+        fetchData();
+      }
+    } catch (err) {
+      alert('Terjadi kesalahan saat menghapus video.');
+    }
+  };
+
+  // Start Cloud Restreaming (Without OBS)
+  const handleStartCloudRestream = async (videoId: string) => {
+    setCloudRestreamLoadingId(videoId);
+    try {
+      const res = await fetch('/api/restream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'start_cloud_restream', videoId }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || 'Gagal memulai Cloud Restream.');
+      } else {
+        alert(data.message);
+        setPlayerKey((prev) => prev + 1);
+        fetchData();
+      }
+    } catch (err) {
+      alert('Terjadi kesalahan koneksi.');
+    } finally {
+      setCloudRestreamLoadingId(null);
+    }
+  };
 
   // Handle Stream Key Reset
   const handleRandomizeIngestKey = async () => {
@@ -629,13 +757,13 @@ export default function Dashboard() {
               <div>
                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '6px 14px', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', backgroundColor: isCurrentlyRestreaming ? 'rgba(244,63,94,0.15)' : 'rgba(148,163,184,0.12)', color: isCurrentlyRestreaming ? '#fb7185' : 'var(--text-secondary)', border: isCurrentlyRestreaming ? '1px solid rgba(244,63,94,0.3)' : '1px solid rgba(148,163,184,0.2)' }}>
                   <span className="pulse-dot"></span>
-                  <span>{isCurrentlyRestreaming ? 'LIVE BROADCASTING' : 'STANDBY'}</span>
+                  <span>{isCurrentlyRestreaming ? (telemetry.activeSource === 'cloud_mp4' ? `CLOUD RESTREAM (${telemetry.activeVideoTitle || 'MP4 Video'})` : 'LIVE BROADCASTING (OBS)') : 'STANDBY'}</span>
                 </div>
                 <h2 style={{ fontSize: '1.25rem', fontWeight: 800, margin: '12px 0 4px 0', color: 'var(--text-primary)' }}>
                   {isCurrentlyRestreaming ? 'Sistem Sedang Menyiarkan Feed Live' : 'Sistem Siap Menyiarkan'}
                 </h2>
                 <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', margin: 0 }}>
-                  {isCurrentlyRestreaming ? `Restreaming aktif ke ${destinations.length} platform target.` : 'Hubungkan OBS Studio dan tekan Mulai Restreaming'}
+                  {isCurrentlyRestreaming ? `Restreaming aktif ke ${destinations.length} platform target.` : 'Gunakan OBS Studio atau unggah video MP4 untuk Cloud Restreaming tanpa OBS'}
                 </p>
               </div>
 
@@ -731,6 +859,130 @@ export default function Dashboard() {
                   <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', display: 'block', marginTop: '2px' }}>⚡ Zero Packet Loss</span>
                 </div>
               </div>
+            </div>
+          </div>
+
+          {/* ☁️ Cloud Restreaming (Tanpa OBS) Section */}
+          <div className="card">
+            <div className="card-header">
+              <div className="card-title">
+                <Film size={18} color="var(--primary)" />
+                <span>Cloud Restreaming (Tanpa OBS) - MP4 Video Library</span>
+              </div>
+              <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.04)', padding: '4px 12px', borderRadius: '10px', border: '1px solid var(--border)' }}>
+                Batas {userPlan.toUpperCase()}: <strong style={{ color: 'var(--primary)' }}>{userPlan === 'ultimate' ? 'Max 3 GB / 5 Jam Video' : userPlan === 'pro' ? 'Max 1 GB / 1 Jam Video' : 'Max 75 MB / 20 Menit Video'}</strong>
+              </div>
+            </div>
+
+            {/* Upload Area */}
+            <form onSubmit={handleUploadVideoSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px', background: 'rgba(255,255,255,0.02)', border: '1px dashed var(--primary)', padding: '20px', borderRadius: '14px', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: '220px' }}>
+                  <label className="form-label">JUDUL VIDEO / LABEL (OPSIONAL)</label>
+                  <input
+                    type="text"
+                    className="input-text"
+                    placeholder="misal Siaran Ulang Game / Intro Video"
+                    value={videoTitleInput}
+                    onChange={(e) => setVideoTitleInput(e.target.value)}
+                  />
+                </div>
+
+                <div style={{ flex: 1.5, minWidth: '260px' }}>
+                  <label className="form-label">PILIH FILE VIDEO (.MP4 ONLY)</label>
+                  <input
+                    type="file"
+                    accept="video/mp4"
+                    className="input-text"
+                    style={{ padding: '8px 12px' }}
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        setSelectedVideoFile(e.target.files[0]);
+                      }
+                    }}
+                  />
+                </div>
+
+                <div style={{ alignSelf: 'flex-end' }}>
+                  <button
+                    type="submit"
+                    disabled={uploading || !selectedVideoFile}
+                    style={{ background: 'var(--primary)', color: '#fff', border: 'none', padding: '12px 20px', borderRadius: '10px', fontWeight: 700, fontSize: '0.88rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
+                  >
+                    {uploading ? <RotateCw className="spin" size={16} /> : <UploadCloud size={16} />}
+                    <span>{uploading ? 'Mengunggah...' : 'Unggah File MP4'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {uploadProgress && <div style={{ fontSize: '0.82rem', color: 'var(--primary)', fontWeight: 600 }}>{uploadProgress}</div>}
+
+              {uploadError && (
+                <div style={{ background: 'rgba(244,63,94,0.15)', border: '1px solid rgba(244,63,94,0.3)', color: '#fb7185', padding: '10px 14px', borderRadius: '8px', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <AlertTriangle size={15} />
+                  <span>{uploadError}</span>
+                </div>
+              )}
+
+              {uploadSuccess && (
+                <div style={{ background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.3)', color: '#34d399', padding: '10px 14px', borderRadius: '8px', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <CheckCircle size={15} />
+                  <span>{uploadSuccess}</span>
+                </div>
+              )}
+            </form>
+
+            {/* Video List */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>DAFTAR VIDEO CLOUD ANDA ({userVideos.length})</span>
+
+              {userVideos.length === 0 ? (
+                <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.88rem', background: 'rgba(255,255,255,0.01)', borderRadius: '12px', border: '1px solid var(--border)' }}>
+                  Belum ada file video MP4 terunggah. Silakan unggah file MP4 Anda untuk mulai siaran tanpa OBS Studio!
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '14px' }}>
+                  {userVideos.map((vid) => {
+                    const sizeMB = (parseInt(vid.sizeBytes) / (1024 * 1024)).toFixed(1);
+                    const durMins = Math.floor(vid.durationSecs / 60);
+                    const durSecs = vid.durationSecs % 60;
+
+                    return (
+                      <div key={vid.id} style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)', padding: '16px', borderRadius: '12px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '12px' }}>
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <FileVideo size={18} color="var(--primary)" />
+                              <span style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)', wordBreak: 'break-all' }}>{vid.title}</span>
+                            </div>
+                            <button
+                              style={{ background: 'transparent', border: 'none', color: '#f43f5e', cursor: 'pointer', padding: '4px' }}
+                              onClick={() => handleDeleteVideo(vid.id, vid.title)}
+                              title="Hapus Video Ini"
+                            >
+                              <Trash size={14} />
+                            </button>
+                          </div>
+
+                          <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', display: 'flex', gap: '12px', marginTop: '4px' }}>
+                            <span>💾 <strong>{sizeMB} MB</strong></span>
+                            <span>⏱️ <strong>{durMins}m {durSecs}s</strong></span>
+                          </div>
+                        </div>
+
+                        <button
+                          style={{ width: '100%', padding: '10px', borderRadius: '8px', border: 'none', background: 'linear-gradient(135deg, var(--secondary) 0%, #059669 100%)', color: '#fff', fontWeight: 800, fontSize: '0.82rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', boxShadow: '0 0 15px rgba(16,185,129,0.3)' }}
+                          onClick={() => handleStartCloudRestream(vid.id)}
+                          disabled={cloudRestreamLoadingId === vid.id}
+                        >
+                          {cloudRestreamLoadingId === vid.id ? <RotateCw className="spin" size={14} /> : <PlayCircle size={14} />}
+                          <span>Mulai Cloud Restream (Tanpa OBS)</span>
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
 
@@ -1030,6 +1282,7 @@ export default function Dashboard() {
                 <ul className="plan-features">
                   <li>✅ Maksimal 2 Target Platform</li>
                   <li>✅ Batas Resolusi 720p HD</li>
+                  <li>☁️ Cloud Restream: Max 75 MB / 20m Video</li>
                   <li>⏱️ Max 4 Jam per Sesi Live</li>
                   <li>📢 Ad-Supported (100% Iklan & Watermark)</li>
                 </ul>
@@ -1053,6 +1306,7 @@ export default function Dashboard() {
                 <ul className="plan-features">
                   <li>✅ Maksimal 4 Target Platform</li>
                   <li>✅ Batas Resolusi 1080p Full HD</li>
+                  <li>☁️ Cloud Restream: Max 1 GB / 1 Jam Video</li>
                   <li>♾️ Unlimited Live Stream 24/7</li>
                   <li>✨ Minimal Ads (25% Minimal Iklan)</li>
                 </ul>
@@ -1075,6 +1329,7 @@ export default function Dashboard() {
                 <ul className="plan-features">
                   <li>✅ Maksimal 8 Target Platform</li>
                   <li>✅ Super Ultra HD 4K60 (3840x2160)</li>
+                  <li>☁️ Cloud Restream: Max 3 GB / 5 Jam Video</li>
                   <li>♾️ Unlimited Live Stream 24/7</li>
                   <li>👑 100% Ad-Free & Watermark-Free</li>
                 </ul>

@@ -1,0 +1,110 @@
+================================================================================
+            WORKFLOW INFRASTRUKTUR & DEVELOPMENT RESTREAM ENGINE
+================================================================================
+
+[1] ARSITEKTUR KESELURUHAN & ALUR DATA
+--------------------------------------------------------------------------------
+                               ┌─────────────────────────┐
+                               │       OBS Studio        │
+                               └============┬============┘
+                                            │ RTMP Stream
+                                            ▼
+                               ┌─────────────────────────┐
+                               │   MediaMTX (Port 1935)  │
+                               └======┬==========┬=======┘
+                                      │          │
+                     HLS Stream (.m3u8)│          │ RTMP Ingest (Pull)
+                                      ▼          ▼
+                        ┌───────────────────┐  ┌───────────────────┐
+                        │ Next.js Dashboard │  │  FFmpeg Process   │
+                        │ (Live Video & UI) │  │ (Multistream Engine)
+                        └=========┬=========┘  └=========┬=========┘
+                                  │                      │
+                                  │ REST API / POST      │ RTMP Push (Max 3)
+                                  ▼                      ▼
+                        ┌───────────────────┐  ┌───────────────────┐
+                        │  Next.js Backend  │  │ YouTube / Twitch /│
+                        │   (Spawn FFmpeg)  │  │  Custom Platform  │
+                        └───────────────────┘  └───────────────────┘
+
+
+[2] PRASYARAT PERANGKAT LOKAL (PREREQUISITES)
+--------------------------------------------------------------------------------
+1. Node.js versi 18.x atau yang lebih baru.
+2. MediaMTX: Berjalan di background (dari C:\mediamtx\mediamtx.exe) sebagai RTMP & HLS Server.
+3. FFmpeg: Ter-install di OS Laptop (dari C:\ffmpeg\ffmpeg-master-latest-win64-gpl-shared\bin\ffmpeg.exe).
+4. OBS Studio: Sebagai software input siaran.
+
+
+[3] PANDUAN KONFIGURASI PERSIAPAN (ONE-TIME SETUP)
+--------------------------------------------------------------------------------
+A. KONFIGURASI MEDIAMTX (mediamtx.yml):
+   ------------------------------------
+   File mediamtx.yml disalin di folder project ini untuk referensi. Pastikan konfigurasi utama:
+   
+   1. Izinkan Akses CORS untuk Browser:
+      hlsAllowOrigins: ["*"]
+
+   2. Izinkan Path Stream Dinamis:
+      paths:
+        live/test:
+        all_others:
+
+   Jalankan MediaMTX: Double-click C:\mediamtx\mediamtx.exe atau panggil via CMD.
+
+
+B. KONFIGURASI OBS STUDIO:
+   -----------------------
+   1. Buka Settings -> Stream.
+   2. Service: Custom...
+   3. Server: rtmp://localhost
+   4. Stream Key: live/test
+   5. Buka Settings -> Output:
+      - Set Output Mode ke "Advanced".
+      - Set Keyframe Interval = 2s (Penting untuk kestabilan segmen HLS).
+
+
+[4] TAHAPAN WORKFLOW CARA MENJALANKAN (RUNNING STEPS)
+--------------------------------------------------------------------------------
+LANGKAH 1: Jalankan MediaMTX
+- Jalankan C:\mediamtx\mediamtx.exe. Pastikan listener RTMP (:1935) dan HLS (:8888) aktif.
+
+LANGKAH 2: Start Stream dari OBS
+- Klik tombol "Start Streaming" di OBS Studio.
+- Perhatikan log MediaMTX, pastikan muncul baris:
+  INF [RTMP] ... is publishing to path 'live/test'
+
+LANGKAH 3: Jalankan Next.js Application
+- Jalankan perintah:
+  npm run dev
+- Buka browser dan akses dashboard di: http://localhost:3000
+
+LANGKAH 4: Eksekusi Multistreaming via Dashboard Web
+1. Amati area "OBS Live Feed Preview" di Web Next.js. Video siaran dari OBS 
+   harus muncul secara real-time.
+2. Pada panel sebelah kanan (Destinasi Multistreaming):
+   - Masukkan Stream Key / RTMP URL platform tujuan (YouTube, Twitch, dll).
+   - Klik tombol "➕ Tambah Platform Destination" untuk menambah input (Max 3).
+   - Klik tombol "🗑️ Hapus" untuk mengurangi input.
+   - Gunakan tombol "🎲 Auto Generate Key" jika ingin membuat custom RTMP path.
+3. Klik tombol "🚀 Start Restreaming".
+4. Backend Next.js akan mengeksekusi FFmpeg di background secara otomatis dan 
+   meneruskan sinyal video ke seluruh platform tujuan secara serentak.
+
+
+[5] TROUBLESHOOTING & PENANGANAN ERROR
+--------------------------------------------------------------------------------
+1. Problem : Video di Next.js Loading Muter-muter / Playlist Error.
+   Solusi  : - Pastikan OBS sudah menekan "Start Streaming" minimal 5-10 detik.
+             - Cek apakah hlsAllowOrigins: ["*"] di mediamtx.yml sudah aktif.
+             - Pastikan tag <video> pada Video.js menggunakan crossorigin="anonymous".
+
+2. Problem : Stream Key Platform Tujuan Tidak Terkirim.
+   Solusi  : - Cek terminal Next.js tempat `npm run dev` berjalan.
+             - Lihat log output FFmpeg error jika ada kesalahan penulisan URL RTMP.
+             - Pastikan koneksi internet laptop aktif untuk mengunggah sinyal ke server luar.
+
+3. Problem : CPU Laptop Terlalu Tinggi / Lag.
+   Solusi  : - Pada Backend API Next.js, pastikan FFmpeg menggunakan perintah `-c copy`.
+             Fitur `-c copy` bertugas menduplikasi stream tanpa re-encoding,
+             sehingga penggunaan CPU tetap sangat hemat (dibawah 5%).

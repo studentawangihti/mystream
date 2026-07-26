@@ -35,8 +35,6 @@ import {
   Wifi,
   Clock,
   Gauge,
-  Users,
-  ShieldCheck,
   Crown,
   Sparkles,
   Zap
@@ -98,7 +96,6 @@ export default function Dashboard() {
 
   const [destinations, setDestinations] = useState<Destination[]>([]);
   const [selectedDestId, setSelectedDestId] = useState<string>('');
-  const [logs, setLogs] = useState<string[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [actionLoading, setActionLoading] = useState<boolean>(false);
   const [resetKeyLoading, setResetKeyLoading] = useState<boolean>(false);
@@ -366,7 +363,7 @@ export default function Dashboard() {
     return (
       <div style={{ display: 'flex', minHeight: '100vh', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--bg-main)', color: 'var(--text-primary)' }}>
         <div style={{ textAlign: 'center' }}>
-          <RotateCw style={{ animation: 'spin 1s linear infinite', width: '36px', height: '36px', color: 'var(--accent-color)' }} />
+          <RotateCw style={{ animation: 'spin 1s linear infinite', width: '36px', height: '36px', color: 'var(--primary)' }} />
           <p style={{ marginTop: '16px', fontSize: '15px', fontWeight: 500 }}>Memuat Studio Dashboard...</p>
         </div>
       </div>
@@ -377,481 +374,484 @@ export default function Dashboard() {
   const isCurrentlyRestreaming = telemetry.status === 'broadcasting';
 
   return (
-    <div className="studio-layout">
-      {/* Sidebar Section */}
-      <aside className={`studio-sidebar ${isSidebarMinimized ? 'minimized' : ''}`}>
-        <div className="sidebar-brand">
-          <div className="brand-logo">
+    <div className="app-container">
+      {/* Auto-Hiding Top Header */}
+      <header className={`app-header ${!showHeader ? 'header-hidden' : ''}`}>
+        <div className="logo-section">
+          <div className="logo-icon-wrapper">
             <Radio size={20} color="#ffffff" />
           </div>
-          {!isSidebarMinimized && (
-            <div className="brand-text">
-              <span className="brand-title">MyStream Studio</span>
-              <span className="brand-badge">BROADCAST ENGINE</span>
-            </div>
-          )}
-          <button 
-            className="sidebar-toggle-btn"
-            onClick={() => setIsSidebarMinimized(!isSidebarMinimized)}
-            title={isSidebarMinimized ? "Expand Sidebar" : "Minimize Sidebar"}
-          >
-            {isSidebarMinimized ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-          </button>
+          <span>MyStream Studio</span>
+          <span className="logo-badge">BROADCAST ENGINE</span>
         </div>
 
-        <nav className="sidebar-menu">
-          {!isSidebarMinimized && <span className="menu-category">NAVIGATION</span>}
-          <button 
-            className={`menu-item ${activeNav === 'studio' ? 'active' : ''}`}
-            onClick={() => setActiveNav('studio')}
-            title="Studio Feed"
-          >
-            <Tv size={18} />
-            {!isSidebarMinimized && <span>Studio Feed</span>}
-          </button>
-          
-          <button 
-            className={`menu-item ${activeNav === 'analytics' ? 'active' : ''}`}
-            onClick={() => setActiveNav('analytics')}
-            title="Analitik Live"
-          >
-            <BarChart3 size={18} />
-            {!isSidebarMinimized && <span>Analitik Live</span>}
-          </button>
-
-          <button 
-            className={`menu-item ${activeNav === 'ingest' ? 'active' : ''}`}
-            onClick={() => setActiveNav('ingest')}
-            title="Ingest OBS"
-          >
-            <Radio size={18} />
-            {!isSidebarMinimized && <span>Ingest OBS</span>}
-          </button>
-
-          <button 
-            className={`menu-item ${activeNav === 'destinations' ? 'active' : ''}`}
-            onClick={() => setActiveNav('destinations')}
-            title="Platform Target"
-          >
-            <Layers size={18} />
-            {!isSidebarMinimized && <span>Platform Target</span>}
-          </button>
-
-          <button 
-            className={`menu-item ${activeNav === 'faq' ? 'active' : ''}`}
-            onClick={() => setIsFaqOpen(true)}
-            title="Buka FAQ"
-          >
-            <HelpCircle size={18} />
-            {!isSidebarMinimized && <span>Buka FAQ</span>}
-          </button>
-        </nav>
-
-        {!isSidebarMinimized && (
-          <div className="sidebar-telemetry">
-            <span className="telemetry-title">TELEMETRY</span>
-            <div className="telemetry-item">
-              <span className="label">FFmpeg Path:</span>
-              <span className="value truncate" title={ffmpegPath}>{ffmpegPath}</span>
-            </div>
-            <div className="telemetry-item">
-              <span className="label">Ingest Server:</span>
-              <span className="value">rtmp://restream.awgverse.io/live</span>
-            </div>
-            <div className="telemetry-item">
-              <span className="label">Plan Membership:</span>
-              <span className="value uppercase font-bold" style={{ color: userPlan === 'ultimate' ? '#eab308' : userPlan === 'pro' ? '#6366f1' : '#94a3b8' }}>
-                {userPlan} PLAN
-              </span>
-            </div>
-          </div>
-        )}
-      </aside>
-
-      {/* Main Content Area */}
-      <div className="studio-container">
-        {/* Auto-Hiding Top Header */}
-        <header className={`studio-header ${!showHeader ? 'header-hidden' : ''}`}>
-          <div className="header-left">
-            <div className="header-logo">
-              <Radio size={22} color="#ffffff" />
-            </div>
-            <span className="header-title">MyStream Studio</span>
-            <span className="header-version">BROADCAST ENGINE</span>
+        <div className="telemetry-bar">
+          <div className="telemetry-chip">
+            <Cpu size={14} color="#10b981" />
+            <span>Pass-through: <strong className="telemetry-chip-val">-c copy (Zero CPU)</strong></span>
           </div>
 
-          <div className="header-right">
-            <div className="server-status-pill">
-              <Cpu size={14} color="#10b981" />
-              <span>Pass-through: <strong>-c copy (Zero CPU)</strong></span>
-            </div>
+          <div className="telemetry-chip">
+            <Radio size={14} color="#6366f1" />
+            <span>Target Active: <strong className="telemetry-chip-val">{destinations.length} / {userPlan === 'ultimate' ? 8 : userPlan === 'pro' ? 4 : 2}</strong></span>
+          </div>
 
-            <div className="server-status-pill">
-              <Radio size={14} color="#6366f1" />
-              <span>Active Targets: <strong>{destinations.length} / {userPlan === 'ultimate' ? 8 : userPlan === 'pro' ? 4 : 2}</strong></span>
-            </div>
+          {/* Plan Badge Button */}
+          <button 
+            className={`plan-badge-btn ${userPlan}`}
+            onClick={() => setIsPlanModalOpen(true)}
+            title="Klik untuk ubah/upgrade plan membership"
+          >
+            {userPlan === 'ultimate' ? <Crown size={14} /> : userPlan === 'pro' ? <Sparkles size={14} /> : <Zap size={14} />}
+            <span style={{ textTransform: 'uppercase' }}>{userPlan} PLAN</span>
+          </button>
 
-            {/* Plan Badge & Switcher Button */}
+          {/* User Profile */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', paddingLeft: '12px', borderLeft: '1px solid var(--border)' }}>
+            <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.85rem', color: '#fff' }}>
+              {session?.user?.name ? session.user.name[0].toUpperCase() : 'U'}
+            </div>
+            <span style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+              {session?.user?.name || 'Studio User'}
+            </span>
             <button 
-              className={`plan-badge-btn ${userPlan}`}
-              onClick={() => setIsPlanModalOpen(true)}
-              title="Klik untuk ubah/upgrade plan membership"
+              className="telemetry-chip" 
+              style={{ cursor: 'pointer', padding: '6px 10px' }}
+              onClick={() => signOut({ callbackUrl: '/login' })}
+              title="Keluar / Sign Out"
             >
-              {userPlan === 'ultimate' ? <Crown size={14} /> : userPlan === 'pro' ? <Sparkles size={14} /> : <Zap size={14} />}
-              <span className="uppercase font-bold">{userPlan} PLAN</span>
+              <LogOut size={13} />
+              <span>Keluar</span>
             </button>
-
-            {/* Profile Menu */}
-            <div className="user-profile-menu">
-              <div className="user-avatar">
-                {session?.user?.name ? session.user.name[0].toUpperCase() : 'U'}
-              </div>
-              <span className="user-name">{session?.user?.name || 'Studio User'}</span>
-              <button 
-                className="logout-btn" 
-                onClick={() => signOut({ callbackUrl: '/login' })}
-                title="Keluar / Sign Out"
-              >
-                <LogOut size={14} />
-                <span>Keluar</span>
-              </button>
-            </div>
-
-            {/* Theme Toggle Buttons */}
-            <div className="theme-toggle-group">
-              <button 
-                className={`theme-btn ${theme === 'light' ? 'active' : ''}`}
-                onClick={() => setTheme('light')}
-                title="Mode Terang (Light Mode)"
-              >
-                ☀️ Light
-              </button>
-              <button 
-                className={`theme-btn ${theme === 'dark' ? 'active' : ''}`}
-                onClick={() => setTheme('dark')}
-                title="Mode Gelap (Dark Mode)"
-              >
-                🌙 Dark
-              </button>
-              <button 
-                className={`theme-btn ${theme === 'system' ? 'active' : ''}`}
-                onClick={() => setTheme('system')}
-                title="Ikuti Tema Sistem Windows"
-              >
-                💻 System
-              </button>
-            </div>
           </div>
-        </header>
 
-        {/* Main Dashboard Content */}
-        <main className="studio-content">
+          {/* Theme Toggle Buttons */}
+          <div style={{ display: 'flex', gap: '4px', background: 'rgba(0,0,0,0.2)', padding: '3px', borderRadius: '8px', border: '1px solid var(--border)' }}>
+            <button 
+              style={{ background: theme === 'light' ? 'var(--primary)' : 'transparent', color: theme === 'light' ? '#fff' : 'var(--text-secondary)', border: 'none', padding: '4px 8px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.72rem', fontWeight: 600 }}
+              onClick={() => setTheme('light')}
+            >
+              ☀️ Light
+            </button>
+            <button 
+              style={{ background: theme === 'dark' ? 'var(--primary)' : 'transparent', color: theme === 'dark' ? '#fff' : 'var(--text-secondary)', border: 'none', padding: '4px 8px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.72rem', fontWeight: 600 }}
+              onClick={() => setTheme('dark')}
+            >
+              🌙 Dark
+            </button>
+            <button 
+              style={{ background: theme === 'system' ? 'var(--primary)' : 'transparent', color: theme === 'system' ? '#fff' : 'var(--text-secondary)', border: 'none', padding: '4px 8px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.72rem', fontWeight: 600 }}
+              onClick={() => setTheme('system')}
+            >
+              💻 System
+            </button>
+          </div>
+        </div>
+      </header>
 
-          {/* Auto-Reject Alert Banner if Resolution Exceeded */}
-          {telemetry.status === 'error' && telemetry.errorMsg && (
-            <div className="auto-reject-banner">
-              <AlertTriangle size={24} style={{ flexShrink: 0 }} />
-              <div style={{ flex: 1 }}>
-                <h4 style={{ fontWeight: 700, margin: '0 0 4px 0', fontSize: '15px' }}>Auto-Reject Proteksi Bandwidth Aktif!</h4>
-                <p style={{ margin: 0, fontSize: '13.5px', opacity: 0.95 }}>{telemetry.errorMsg}</p>
+      {/* App Body Wrapper (Sidebar + Main Content) */}
+      <div className="app-body-wrapper">
+        {/* Vertical Collapsible Sidebar */}
+        <aside className={`app-sidebar ${isSidebarMinimized ? 'minimized' : ''}`}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span className="sidebar-section-title">NAVIGATION</span>
+            <button 
+              style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '4px' }}
+              onClick={() => setIsSidebarMinimized(!isSidebarMinimized)}
+              title={isSidebarMinimized ? "Expand Sidebar" : "Minimize Sidebar"}
+            >
+              {isSidebarMinimized ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+            </button>
+          </div>
+
+          <ul className="sidebar-nav-list">
+            <li>
+              <a 
+                className={`sidebar-nav-item ${activeNav === 'studio' ? 'active' : ''}`}
+                onClick={() => setActiveNav('studio')}
+              >
+                <Tv size={18} />
+                <span className="sidebar-nav-text">Studio Feed</span>
+              </a>
+            </li>
+            <li>
+              <a 
+                className={`sidebar-nav-item ${activeNav === 'analytics' ? 'active' : ''}`}
+                onClick={() => setActiveNav('analytics')}
+              >
+                <BarChart3 size={18} />
+                <span className="sidebar-nav-text">Analitik Live</span>
+              </a>
+            </li>
+            <li>
+              <a 
+                className={`sidebar-nav-item ${activeNav === 'ingest' ? 'active' : ''}`}
+                onClick={() => setActiveNav('ingest')}
+              >
+                <Radio size={18} />
+                <span className="sidebar-nav-text">Ingest OBS</span>
+              </a>
+            </li>
+            <li>
+              <a 
+                className={`sidebar-nav-item ${activeNav === 'destinations' ? 'active' : ''}`}
+                onClick={() => setActiveNav('destinations')}
+              >
+                <Layers size={18} />
+                <span className="sidebar-nav-text">Platform Target</span>
+              </a>
+            </li>
+            <li>
+              <a 
+                className="sidebar-nav-item"
+                onClick={() => setIsFaqOpen(true)}
+              >
+                <HelpCircle size={18} />
+                <span className="sidebar-nav-text">Buka FAQ</span>
+              </a>
+            </li>
+          </ul>
+
+          {!isSidebarMinimized && (
+            <div style={{ marginTop: 'auto', paddingTop: '16px', borderTop: '1px solid var(--border)', fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <span className="sidebar-section-title" style={{ padding: 0 }}>SYSTEM DATA</span>
+              <div>
+                <span className="sidebar-telemetry-text">FFmpeg Path:</span>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.7rem', wordBreak: 'break-all', margin: '2px 0 0 0' }}>{ffmpegPath}</p>
               </div>
-              <button className="upgrade-now-btn" onClick={() => setIsPlanModalOpen(true)}>
-                <Crown size={14} /> Upgrade Plan Sekarang
-              </button>
+              <div>
+                <span className="sidebar-telemetry-text">Ingest Server:</span>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.7rem', margin: '2px 0 0 0' }}>rtmp://restream.awgverse.io/live</p>
+              </div>
             </div>
           )}
+        </aside>
 
-          {/* Top Master Restream Bar */}
-          <div className="master-control-bar card">
-            <div className="control-bar-info">
-              <div className={`status-indicator ${isCurrentlyRestreaming ? 'live' : 'standby'}`}>
-                <span className="pulse-dot"></span>
-                <span>{isCurrentlyRestreaming ? 'LIVE BROADCASTING' : 'STANDBY'}</span>
+        {/* Main Content Area */}
+        <main className="main-content">
+
+          {/* Left Column: Telemetry & Controls & Player */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+
+            {/* Auto-Reject Alert Banner if Resolution Exceeded */}
+            {telemetry.status === 'error' && telemetry.errorMsg && (
+              <div className="auto-reject-banner">
+                <AlertTriangle size={24} style={{ flexShrink: 0 }} />
+                <div style={{ flex: 1 }}>
+                  <h4 style={{ fontWeight: 700, margin: '0 0 4px 0', fontSize: '15px' }}>Auto-Reject Proteksi Bandwidth Aktif!</h4>
+                  <p style={{ margin: 0, fontSize: '13.5px', opacity: 0.95 }}>{telemetry.errorMsg}</p>
+                </div>
+                <button className="upgrade-now-btn" onClick={() => setIsPlanModalOpen(true)}>
+                  <Crown size={14} /> Upgrade Plan Sekarang
+                </button>
               </div>
-              <div className="control-bar-text">
-                <h3>{isCurrentlyRestreaming ? 'Sistem Sedang Menyiarkan Feed Live' : 'Sistem Siap Menyiarkan'}</h3>
-                <p>{isCurrentlyRestreaming ? `Restreaming aktif ke ${destinations.length} platform target.` : 'Hubungkan OBS Studio dan tekan Mulai Restreaming'}</p>
+            )}
+
+            {/* Master Control Card */}
+            <div className="card master-control-card">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+                <div>
+                  <div className={`status-live-badge ${isCurrentlyRestreaming ? 'status-live-active' : 'status-live-idle'}`}>
+                    <span className="pulse-dot"></span>
+                    <span>{isCurrentlyRestreaming ? 'LIVE BROADCASTING' : 'STANDBY'}</span>
+                  </div>
+                  <h2 style={{ fontSize: '1.25rem', fontWeight: 800, margin: '12px 0 4px 0', color: 'var(--text-primary)' }}>
+                    {isCurrentlyRestreaming ? 'Sistem Sedang Menyiarkan Feed Live' : 'Sistem Siap Menyiarkan'}
+                  </h2>
+                  <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', margin: 0 }}>
+                    {isCurrentlyRestreaming ? `Restreaming aktif ke ${destinations.length} platform target.` : 'Hubungkan OBS Studio dan tekan Mulai Restreaming'}
+                  </p>
+                </div>
+
+                <button
+                  className="master-stream-btn"
+                  style={{
+                    padding: '14px 28px',
+                    borderRadius: '12px',
+                    fontSize: '0.95rem',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    border: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    backgroundColor: isCurrentlyRestreaming ? 'var(--danger)' : 'var(--secondary)',
+                    color: '#ffffff',
+                    boxShadow: isCurrentlyRestreaming ? '0 0 25px rgba(244,63,94,0.4)' : '0 0 25px rgba(16,185,129,0.4)',
+                    transition: 'all 0.2s ease',
+                  }}
+                  onClick={handleToggleRestream}
+                  disabled={actionLoading}
+                >
+                  {actionLoading ? (
+                    <RotateCw className="spin" size={18} />
+                  ) : isCurrentlyRestreaming ? (
+                    <>
+                      <Square size={18} />
+                      <span>Hentikan Restreaming</span>
+                    </>
+                  ) : (
+                    <>
+                      <Play size={18} />
+                      <span>Mulai Restreaming</span>
+                    </>
+                  )}
+                </button>
               </div>
             </div>
 
-            <button
-              className={`master-stream-btn ${isCurrentlyRestreaming ? 'stop' : 'start'}`}
-              onClick={handleToggleRestream}
-              disabled={actionLoading}
-            >
-              {actionLoading ? (
-                <RotateCw className="spin" size={18} />
-              ) : isCurrentlyRestreaming ? (
-                <>
-                  <Square size={18} />
-                  <span>Hentikan Restreaming</span>
-                </>
-              ) : (
-                <>
-                  <Play size={18} />
-                  <span>Mulai Restreaming</span>
-                </>
-              )}
-            </button>
-          </div>
+            {/* Telemetry Analytics Card */}
+            <div className="card">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div className="card-title" style={{ border: 'none', padding: 0 }}>
+                  <BarChart3 size={18} color="var(--primary)" />
+                  <span>Analitik Broadcast & Kualitas Jaringan Live</span>
+                </div>
+                <span className="ad-status-badge" style={{ backgroundColor: userPlan === 'ultimate' ? 'rgba(234, 179, 8, 0.15)' : userPlan === 'pro' ? 'rgba(99, 102, 241, 0.15)' : 'rgba(148, 163, 184, 0.15)', color: userPlan === 'ultimate' ? '#eab308' : userPlan === 'pro' ? '#6366f1' : '#94a3b8' }}>
+                  {telemetry.adStatus}
+                </span>
+              </div>
 
-          {/* Live Telemetry Module Card */}
-          <div className="card telemetry-module-card">
-            <div className="card-header">
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+                <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)', padding: '16px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+                  <Clock size={24} color="#6366f1" />
+                  <div>
+                    <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block' }}>DURASI LIVE</span>
+                    <span style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', fontFamily: 'monospace' }}>{telemetry.duration}</span>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginTop: '2px' }}>
+                      {userPlan === 'free' ? 'Max 4 Jam per Sesi (Free)' : 'Unlimited 24/7 Non-Stop'}
+                    </span>
+                  </div>
+                </div>
+
+                <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)', padding: '16px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+                  <Gauge size={24} color="#10b981" />
+                  <div>
+                    <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block' }}>INGEST BITRATE</span>
+                    <span style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)' }}>{telemetry.bitrate} <small style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Kbps</small></span>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginTop: '2px' }}>
+                      {userPlan === 'free' ? 'Max 4.500 Kbps Limit' : userPlan === 'pro' ? 'Max 10.000 Kbps' : 'Max 35.000 Kbps (4K)'}
+                    </span>
+                  </div>
+                </div>
+
+                <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)', padding: '16px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+                  <Activity size={24} color="#f59e0b" />
+                  <div>
+                    <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block' }}>FPS | RESOLUSI</span>
+                    <span style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-primary)' }}>{telemetry.fps} FPS <small style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>| {telemetry.resolution}</small></span>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginTop: '2px' }}>
+                      Target: {userPlan === 'free' ? '720p HD' : userPlan === 'pro' ? '1080p FHD' : '4K Ultra HD'}
+                    </span>
+                  </div>
+                </div>
+
+                <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)', padding: '16px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+                  <Wifi size={24} color={isCurrentlyRestreaming ? "#10b981" : "#64748b"} />
+                  <div>
+                    <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block' }}>KUALITAS JARINGAN</span>
+                    <span style={{ fontSize: '1.1rem', fontWeight: 800, color: isCurrentlyRestreaming ? '#10b981' : '#64748b' }}>
+                      {isCurrentlyRestreaming ? '🟢 Sempurna' : '⚪ Offline'}
+                    </span>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginTop: '2px' }}>⚡ Zero Packet Loss</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Live Preview Player Card */}
+            <div className="card">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div className="card-title" style={{ border: 'none', padding: 0 }}>
+                  <Video size={18} color="var(--primary)" />
+                  <span>Live Monitor Feed (WebRTC Low Latency)</span>
+                </div>
+                <button
+                  style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'var(--text-primary)', padding: '6px 12px', borderRadius: '8px', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                  onClick={() => setPlayerKey((prev) => prev + 1)}
+                  title="Reload Player Feed"
+                >
+                  <RotateCw size={13} />
+                  <span>Reload Feed</span>
+                </button>
+              </div>
+
+              <div className="video-wrapper">
+                <iframe
+                  key={playerKey}
+                  src={`http://localhost:8889/live/${ingestKey}`}
+                  style={{ width: '100%', height: '100%', border: 'none' }}
+                  allow="autoplay; fullscreen"
+                  title="Live WebRTC Preview Player"
+                />
+                <div className="video-overlay-badge">
+                  <span className="pulse-dot" style={{ backgroundColor: '#10b981' }}></span>
+                  <span>WHEP WebRTC (&lt;0.5s)</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Setup Guide Card */}
+            <div className="card">
               <div className="card-title">
-                <BarChart3 size={18} color="var(--accent-color)" />
-                <span>Analitik Broadcast & Kualitas Jaringan Live</span>
-              </div>
-              <span className="ad-status-badge" style={{ backgroundColor: userPlan === 'ultimate' ? 'rgba(234, 179, 8, 0.15)' : userPlan === 'pro' ? 'rgba(99, 102, 241, 0.15)' : 'rgba(148, 163, 184, 0.15)', color: userPlan === 'ultimate' ? '#eab308' : userPlan === 'pro' ? '#6366f1' : '#94a3b8' }}>
-                {telemetry.adStatus}
-              </span>
-            </div>
-
-            <div className="telemetry-grid">
-              <div className="telemetry-card">
-                <div className="card-metric-icon">
-                  <Clock size={20} color="#6366f1" />
-                </div>
-                <div className="card-metric-data">
-                  <span className="metric-label">DURASI LIVE</span>
-                  <span className="metric-value font-mono">{telemetry.duration}</span>
-                  <span className="metric-subtext">
-                    {userPlan === 'free' ? 'Max 4 Jam per Sesi (Free)' : 'Unlimited 24/7 Non-Stop'}
-                  </span>
-                </div>
+                <Radio size={18} color="var(--primary)" />
+                <span>Quick Setup OBS Studio</span>
               </div>
 
-              <div className="telemetry-card">
-                <div className="card-metric-icon">
-                  <Gauge size={20} color="#10b981" />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  <span style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: 'rgba(99,102,241,0.15)', color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.8rem', flexShrink: 0 }}>1</span>
+                  <div style={{ fontSize: '0.88rem', color: 'var(--text-primary)' }}>
+                    Buka OBS Studio &gt; <strong>Settings</strong> &gt; <strong>Stream</strong>. Pilih Service: <strong>Custom...</strong>
+                  </div>
                 </div>
-                <div className="card-metric-data">
-                  <span className="metric-label">INGEST BITRATE</span>
-                  <span className="metric-value">{telemetry.bitrate} <small>Kbps</small></span>
-                  <span className="metric-subtext">
-                    {userPlan === 'free' ? 'Max 4.500 Kbps Limit' : userPlan === 'pro' ? 'Max 10.000 Kbps' : 'Max 35.000 Kbps (4K)'}
-                  </span>
-                </div>
-              </div>
 
-              <div className="telemetry-card">
-                <div className="card-metric-icon">
-                  <Activity size={20} color="#f59e0b" />
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  <span style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: 'rgba(99,102,241,0.15)', color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.8rem', flexShrink: 0 }}>2</span>
+                  <div style={{ flex: 1, fontSize: '0.88rem', color: 'var(--text-primary)' }}>
+                    <p style={{ margin: '0 0 6px 0' }}>Salin Server URL berikut ke kolom <strong>Server</strong>:</p>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg-input)', border: '1px solid var(--border)', padding: '8px 12px', borderRadius: '8px' }}>
+                      <code style={{ flex: 1, fontSize: '0.85rem', color: 'var(--text-terminal)', fontFamily: 'monospace' }}>rtmp://restream.awgverse.io/live</code>
+                      <button 
+                        style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '4px' }}
+                        onClick={() => copyToClipboard('rtmp://restream.awgverse.io/live', 'server')}
+                      >
+                        {copiedServer ? <Check size={14} color="#10b981" /> : <Copy size={14} />}
+                      </button>
+                    </div>
+                  </div>
                 </div>
-                <div className="card-metric-data">
-                  <span className="metric-label">FRAME RATE / RESOLUSI</span>
-                  <span className="metric-value">{telemetry.fps} <small>FPS</small> | <small style={{ fontSize: '13px', fontWeight: 600 }}>{telemetry.resolution}</small></span>
-                  <span className="metric-subtext">
-                    Target Max: {userPlan === 'free' ? '720p HD' : userPlan === 'pro' ? '1080p FHD' : '4K Ultra HD'}
-                  </span>
-                </div>
-              </div>
 
-              <div className="telemetry-card">
-                <div className="card-metric-icon">
-                  <Wifi size={20} color={isCurrentlyRestreaming ? "#10b981" : "#64748b"} />
-                </div>
-                <div className="card-metric-data">
-                  <span className="metric-label">KUALITAS JARINGAN</span>
-                  <span className="metric-value" style={{ color: isCurrentlyRestreaming ? '#10b981' : '#64748b' }}>
-                    {isCurrentlyRestreaming ? '🟢 Sempurna' : '⚪ Offline'}
-                  </span>
-                  <span className="metric-subtext">⚡ Zero Packet Loss</span>
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  <span style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: 'rgba(99,102,241,0.15)', color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.8rem', flexShrink: 0 }}>3</span>
+                  <div style={{ flex: 1, fontSize: '0.88rem', color: 'var(--text-primary)' }}>
+                    <p style={{ margin: '0 0 6px 0' }}>Salin Stream Key permanen akun Anda ke kolom <strong>Stream Key</strong>:</p>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg-input)', border: '1px solid var(--border)', padding: '8px 12px', borderRadius: '8px' }}>
+                      <code style={{ flex: 1, fontSize: '0.85rem', color: 'var(--text-terminal)', fontFamily: 'monospace' }}>{ingestKey}</code>
+                      <button 
+                        style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '4px' }}
+                        onClick={() => copyToClipboard(ingestKey, 'key')}
+                      >
+                        {copiedKey ? <Check size={14} color="#10b981" /> : <Copy size={14} />}
+                      </button>
+                    </div>
+
+                    <div style={{ marginTop: '10px' }}>
+                      <button
+                        style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'var(--text-secondary)', padding: '6px 12px', borderRadius: '8px', fontSize: '0.78rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                        onClick={handleRandomizeIngestKey}
+                        disabled={resetKeyLoading || isCurrentlyRestreaming}
+                      >
+                        {resetKeyLoading ? <RotateCw className="spin" size={13} /> : <RotateCw size={13} />}
+                        <span>Acak Stream Key (1x/24 jam)</span>
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
+
           </div>
 
-          {/* Grid Layout: Live Preview Player & Destinations Manager */}
-          <div className="dashboard-grid">
-
-            {/* Left Column: Live Monitor Feed (WebRTC Low Latency) */}
-            <div className="grid-left">
-              <div className="card preview-card">
-                <div className="card-header">
-                  <div className="card-title">
-                    <Video size={18} color="var(--accent-color)" />
-                    <span>Live Monitor Feed (WebRTC Low Latency)</span>
-                  </div>
-                  <button
-                    className="icon-btn"
-                    onClick={() => setPlayerKey((prev) => prev + 1)}
-                    title="Reload Player Feed"
-                  >
-                    <RotateCw size={14} />
-                    <span>Reload Feed</span>
-                  </button>
+          {/* Right Column: Platform Destinations Manager */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            <div className="card">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div className="card-title" style={{ border: 'none', padding: 0 }}>
+                  <Tv size={18} color="var(--primary)" />
+                  <span>Target Platform (Max {userPlan === 'ultimate' ? 8 : userPlan === 'pro' ? 4 : 2})</span>
                 </div>
-
-                <div className="player-wrapper">
-                  <iframe
-                    key={playerKey}
-                    src={`http://localhost:8889/live/${ingestKey}`}
-                    className="webrtc-iframe"
-                    allow="autoplay; fullscreen"
-                    title="Live WebRTC Preview Player"
-                  />
-                  <div className="player-overlay-tag">
-                    <span className="tag-dot"></span>
-                    <span>WHEP WebRTC (&lt;0.5s)</span>
-                  </div>
-                </div>
+                <button
+                  style={{ background: 'var(--primary)', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                  onClick={handleAddDestination}
+                >
+                  <Plus size={14} />
+                  <span>Tambah Platform</span>
+                </button>
               </div>
 
-              {/* Quick Setup Guide Card */}
-              <div className="card setup-guide-card">
-                <div className="card-header">
-                  <div className="card-title">
-                    <Radio size={18} color="var(--accent-color)" />
-                    <span>Quick Setup OBS Studio</span>
-                  </div>
-                </div>
-
-                <div className="setup-steps">
-                  <div className="step-item">
-                    <span className="step-num">1</span>
-                    <div className="step-content">
-                      <p>Buka OBS Studio &gt; <strong>Settings</strong> &gt; <strong>Stream</strong>.</p>
-                      <p>Pilih Service: <strong>Custom...</strong></p>
-                    </div>
-                  </div>
-
-                  <div className="step-item">
-                    <span className="step-num">2</span>
-                    <div className="step-content">
-                      <p>Salin Server URL berikut ke kolom <strong>Server</strong>:</p>
-                      <div className="copy-field">
-                        <code>rtmp://restream.awgverse.io/live</code>
-                        <button 
-                          className="copy-btn" 
-                          onClick={() => copyToClipboard('rtmp://restream.awgverse.io/live', 'server')}
-                        >
-                          {copiedServer ? <Check size={14} color="#10b981" /> : <Copy size={14} />}
-                        </button>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {destinations.map((dest, idx) => (
+                  <div 
+                    key={dest.id} 
+                    style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)', padding: '16px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '12px' }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: dest.status === 'broadcasting' ? '#10b981' : '#64748b' }}></span>
+                        <span style={{ fontWeight: 700, fontSize: '0.92rem', color: 'var(--text-primary)' }}>{dest.name}</span>
                       </div>
-                    </div>
-                  </div>
-
-                  <div className="step-item">
-                    <span className="step-num">3</span>
-                    <div className="step-content">
-                      <p>Salin Stream Key permanen akun Anda ke kolom <strong>Stream Key</strong>:</p>
-                      <div className="copy-field">
-                        <code>{ingestKey}</code>
-                        <button 
-                          className="copy-btn" 
-                          onClick={() => copyToClipboard(ingestKey, 'key')}
-                        >
-                          {copiedKey ? <Check size={14} color="#10b981" /> : <Copy size={14} />}
-                        </button>
-                      </div>
-
-                      <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: '6px', backgroundColor: 'rgba(255,255,255,0.05)', color: 'var(--text-secondary)' }}>
+                          {dest.status.toUpperCase()}
+                        </span>
                         <button
-                          className="reset-key-btn"
-                          onClick={handleRandomizeIngestKey}
-                          disabled={resetKeyLoading || isCurrentlyRestreaming}
+                          style={{ background: 'transparent', border: 'none', color: '#f43f5e', cursor: 'pointer', padding: '4px' }}
+                          onClick={() => handleRemoveDestination(dest.id)}
+                          title="Hapus Platform"
                         >
-                          {resetKeyLoading ? <RotateCw className="spin" size={13} /> : <RotateCw size={13} />}
-                          <span>Acak Stream Key (1x/24 jam)</span>
+                          <Trash size={14} />
                         </button>
                       </div>
                     </div>
-                  </div>
-                </div>
-              </div>
-            </div>
 
-            {/* Right Column: Platform Destinations Configurator */}
-            <div className="grid-right">
-              <div className="card destinations-card">
-                <div className="card-header">
-                  <div className="card-title">
-                    <Tv size={18} color="var(--accent-color)" />
-                    <span>Target Platform (Maksimal {userPlan === 'ultimate' ? 8 : userPlan === 'pro' ? 4 : 2})</span>
-                  </div>
-                  <button
-                    className="add-dest-btn"
-                    onClick={handleAddDestination}
-                  >
-                    <Plus size={14} />
-                    <span>Tambah Platform</span>
-                  </button>
-                </div>
-
-                <div className="destinations-list">
-                  {destinations.map((dest, idx) => (
-                    <div className="destination-item" key={dest.id}>
-                      <div className="dest-header">
-                        <div className="dest-title">
-                          <span className={`dest-status-dot ${dest.status}`}></span>
-                          <span className="dest-name font-bold">{dest.name}</span>
-                        </div>
-                        <div className="dest-actions">
-                          <span className="dest-status-tag">{dest.status.toUpperCase()}</span>
-                          <button
-                            className="delete-btn"
-                            onClick={() => handleRemoveDestination(dest.id)}
-                            title="Hapus Platform"
-                          >
-                            <Trash size={14} />
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="form-group">
-                        <label>NAMA PLATFORM / LABEL</label>
-                        <input
-                          type="text"
-                          value={dest.name}
-                          onChange={(e) => {
-                            const newDestArr = [...destinations];
-                            newDestArr[idx].name = e.target.value;
-                            setDestinations(newDestArr);
-                          }}
-                          placeholder="misal YouTube Utama / Twitch TV"
-                        />
-                      </div>
-
-                      <div className="form-group">
-                        <label>RTMP SERVER URL</label>
-                        <input
-                          type="text"
-                          value={dest.rtmpUrl}
-                          onChange={(e) => {
-                            const newDestArr = [...destinations];
-                            newDestArr[idx].rtmpUrl = e.target.value;
-                            setDestinations(newDestArr);
-                          }}
-                          placeholder="rtmp://a.rtmp.youtube.com/live2"
-                        />
-                      </div>
-
-                      <div className="form-group">
-                        <label>STREAM KEY TARGET</label>
-                        <input
-                          type="password"
-                          value={dest.streamKey}
-                          onChange={(e) => {
-                            const newDestArr = [...destinations];
-                            newDestArr[idx].streamKey = e.target.value;
-                            setDestinations(newDestArr);
-                          }}
-                          placeholder="Masukkan Stream Key Anda"
-                        />
-                      </div>
+                    <div className="form-group">
+                      <label className="form-label">NAMA PLATFORM / LABEL</label>
+                      <input
+                        type="text"
+                        className="input-text"
+                        value={dest.name}
+                        onChange={(e) => {
+                          const newDestArr = [...destinations];
+                          newDestArr[idx].name = e.target.value;
+                          setDestinations(newDestArr);
+                        }}
+                        placeholder="misal YouTube Utama / Twitch TV"
+                      />
                     </div>
-                  ))}
 
-                  <button className="save-all-btn">
-                    <Save size={16} />
-                    <span>Simpan Semua Konfigurasi Target</span>
-                  </button>
-                </div>
+                    <div className="form-group">
+                      <label className="form-label">RTMP SERVER URL</label>
+                      <input
+                        type="text"
+                        className="input-text"
+                        value={dest.rtmpUrl}
+                        onChange={(e) => {
+                          const newDestArr = [...destinations];
+                          newDestArr[idx].rtmpUrl = e.target.value;
+                          setDestinations(newDestArr);
+                        }}
+                        placeholder="rtmp://a.rtmp.youtube.com/live2"
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">STREAM KEY TARGET</label>
+                      <input
+                        type="password"
+                        className="input-text"
+                        value={dest.streamKey}
+                        onChange={(e) => {
+                          const newDestArr = [...destinations];
+                          newDestArr[idx].streamKey = e.target.value;
+                          setDestinations(newDestArr);
+                        }}
+                        placeholder="Masukkan Stream Key Anda"
+                      />
+                    </div>
+                  </div>
+                ))}
+
+                <button 
+                  style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'var(--text-primary)', padding: '12px', borderRadius: '10px', fontSize: '0.88rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', width: '100%', marginTop: '8px' }}
+                >
+                  <Save size={16} />
+                  <span>Simpan Semua Konfigurasi Target</span>
+                </button>
               </div>
             </div>
-
           </div>
+
         </main>
       </div>
 
@@ -859,12 +859,12 @@ export default function Dashboard() {
       {isPlanModalOpen && (
         <div className="modal-backdrop">
           <div className="plan-modal-card">
-            <div className="modal-header">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '16px', borderBottom: '1px solid var(--border)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Crown size={22} color="#eab308" />
-                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>Pilih Tier Membership MyStream Studio</h3>
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)' }}>Pilih Tier Membership MyStream Studio</h3>
               </div>
-              <button className="close-modal-btn" onClick={() => setIsPlanModalOpen(false)}>
+              <button style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }} onClick={() => setIsPlanModalOpen(false)}>
                 <X size={18} />
               </button>
             </div>
@@ -944,30 +944,30 @@ export default function Dashboard() {
       {/* FAQ Locker Modal */}
       {isFaqOpen && (
         <div className="modal-backdrop">
-          <div className="faq-modal-card">
-            <div className="modal-header">
+          <div className="plan-modal-card" style={{ maxWidth: '720px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '16px', borderBottom: '1px solid var(--border)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <HelpCircle size={20} color="var(--accent-color)" />
-                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>Pertanyaan Sering Diajukan (FAQ)</h3>
+                <HelpCircle size={20} color="var(--primary)" />
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)' }}>Pertanyaan Sering Diajukan (FAQ)</h3>
               </div>
-              <button className="close-modal-btn" onClick={() => setIsFaqOpen(false)}>
+              <button style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }} onClick={() => setIsFaqOpen(false)}>
                 <X size={18} />
               </button>
             </div>
 
-            <div className="faq-accordion-container">
+            <div style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {faqData.map((faq, idx) => (
-                <div className="faq-accordion-item" key={idx}>
+                <div key={idx} style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)', borderRadius: '10px', overflow: 'hidden' }}>
                   <button
-                    className={`faq-question-btn ${openFaqIndex === idx ? 'expanded' : ''}`}
+                    style={{ width: '100%', padding: '14px 16px', background: 'transparent', border: 'none', color: 'var(--text-primary)', fontWeight: 700, fontSize: '0.9rem', textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
                     onClick={() => setOpenFaqIndex(openFaqIndex === idx ? null : idx)}
                   >
                     <span>{faq.q}</span>
-                    <ChevronDown size={16} className={`chevron-icon ${openFaqIndex === idx ? 'rotate' : ''}`} />
+                    <ChevronDown size={16} style={{ transform: openFaqIndex === idx ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />
                   </button>
                   {openFaqIndex === idx && (
-                    <div className="faq-answer-content">
-                      <p style={{ whiteSpace: 'pre-line' }}>{faq.a}</p>
+                    <div style={{ padding: '0 16px 16px 16px', fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.6, whiteSpace: 'pre-line' }}>
+                      <p style={{ margin: 0 }}>{faq.a}</p>
                     </div>
                   )}
                 </div>
@@ -978,16 +978,16 @@ export default function Dashboard() {
       )}
 
       {/* Footer Section */}
-      <footer className="studio-footer">
-        <div className="footer-left">
+      <footer style={{ background: 'var(--bg-footer)', borderTop: '1px solid var(--border)', padding: '16px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+        <div>
           <span>Copyright by <strong>awgxidn © 2026</strong>. All Rights Reserved.</span>
         </div>
-        <div className="footer-right">
+        <div>
           <a
             href="https://github.com/studentawangihti/mystream"
             target="_blank"
             rel="noopener noreferrer"
-            className="github-footer-link"
+            style={{ color: 'var(--primary)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}
           >
             <Terminal size={14} />
             <span>GitHub Repository: studentawangihti/mystream</span>

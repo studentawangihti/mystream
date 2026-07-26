@@ -78,13 +78,17 @@ export async function DELETE(req: Request) {
     });
 
     if (!video) {
-      return NextResponse.json({ error: 'Video tidak ditemukan.' }, { status: 404 });
+      return NextResponse.json({ error: 'Video tidak ditemukan di database.' }, { status: 404 });
     }
 
-    // Delete file from disk if exists
-    const fullPath = path.join(process.cwd(), video.filePath);
-    if (fs.existsSync(fullPath)) {
-      fs.unlinkSync(fullPath);
+    // Attempt to delete physical file from disk safely
+    try {
+      const fullPath = path.join(process.cwd(), video.filePath);
+      if (fs.existsSync(fullPath)) {
+        fs.unlinkSync(fullPath);
+      }
+    } catch (fsErr) {
+      console.warn('Physical file deletion warning (possibly locked):', fsErr);
     }
 
     // Delete database entry
@@ -94,9 +98,10 @@ export async function DELETE(req: Request) {
 
     return NextResponse.json({
       success: true,
-      message: 'Video berhasil dihapus dari Cloud Library.',
+      message: `Video "${video.title}" berhasil dihapus dari Cloud Storage!`,
     });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error('Video DELETE API error:', error);
+    return NextResponse.json({ error: error.message || 'Gagal menghapus video.' }, { status: 500 });
   }
 }

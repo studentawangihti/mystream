@@ -348,9 +348,12 @@ export default function Dashboard() {
       });
 
       const data = await res.json();
+
       if (!res.ok) {
         alert(data.error || 'Gagal menghapus video.');
       } else {
+        alert(data.message);
+        setUserVideos((prev) => prev.filter((v) => v.id !== videoId));
         fetchData();
       }
     } catch (err) {

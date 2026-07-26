@@ -86,3 +86,13 @@ LANGKAH 4: ANTARMUKA DASHBOARD WEB (app/page.tsx)
 --------------------------------------------------------------------------------
 * KEUNTUNGAN BERSIH (PROFIT)   : + Rp 430.000 / bulan (Internet Rumah 100% Gratis!)
 ================================================================================
+
+
+tambahan dari aku :
+jika user free bisa restream 720p untuk 2 platform
+jika user pro bisa restream 1080p untuk upto 4 platform
+jika user ultimate bisa restream 4k untuk upto 8 platform
+
+serta untuk user free ada 100% iklan serta untuk user pro ada 25% iklan untuk user ultimate tanpa iklan
+serta untuk planning pro dan ultimate bisa restream tanpa batas waktu
+dibuat lebih balance

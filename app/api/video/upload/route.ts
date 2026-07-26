@@ -9,18 +9,39 @@ import util from 'util';
 
 const execPromise = util.promisify(exec);
 
-// FFprobe helper to extract video duration in seconds
-async function getVideoDuration(filePath: string): Promise<number> {
+// FFprobe helper to extract video duration & format name
+async function getVideoInfo(filePath: string): Promise<{ duration: number; formatName: string }> {
   try {
     const ffprobePath = 'C:\\ffmpeg\\ffmpeg-master-latest-win64-gpl-shared\\bin\\ffprobe.exe';
-    const cmd = `"${ffprobePath}" -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${filePath}"`;
+    const cmd = `"${ffprobePath}" -v error -show_entries format=duration,format_name -of default=noprint_wrappers=1 "${filePath}"`;
     const { stdout } = await execPromise(cmd);
-    const duration = parseFloat(stdout.trim());
-    return isNaN(duration) ? 0 : Math.round(duration);
+
+    let duration = 0;
+    let formatName = '';
+
+    const lines = stdout.split('\n');
+    for (const line of lines) {
+      if (line.startsWith('duration=')) {
+        const durVal = parseFloat(line.split('=')[1]);
+        duration = isNaN(durVal) ? 0 : Math.round(durVal);
+      } else if (line.startsWith('format_name=')) {
+        formatName = line.split('=')[1].trim();
+      }
+    }
+
+    return { duration, formatName };
   } catch (error) {
-    console.error('FFprobe duration extraction error:', error);
-    return 0;
+    console.error('FFprobe info extraction error:', error);
+    return { duration: 0, formatName: '' };
   }
+}
+
+// Function to check MP4 Magic Bytes (ftyp container marker)
+function isMp4Buffer(buffer: Buffer): boolean {
+  if (buffer.length < 12) return false;
+  // MP4 files contain 'ftyp' at offset 4..7 (Hex: 66 74 79 70)
+  const ftypMarker = buffer.slice(4, 8).toString('ascii');
+  return ftypMarker === 'ftyp';
 }
 
 export async function POST(req: Request) {
@@ -41,14 +62,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'File video MP4 wajib diunggah.' }, { status: 400 });
     }
 
-    // 1. Enforce MP4 format strictly
+    // 1. Strict File Extension & MIME Type Check
     const originalName = file.name;
     const isMp4Extension = originalName.toLowerCase().endsWith('.mp4');
-    const isMp4Mime = file.type === 'video/mp4';
 
-    if (!isMp4Extension && !isMp4Mime) {
+    if (!isMp4Extension) {
       return NextResponse.json(
-        { error: 'Format file tidak valid. Hanya file video .MP4 yang diizinkan!' },
+        { error: 'Format file tidak diizinkan! File wajib memiliki ekstensi .MP4' },
         { status: 400 }
       );
     }
@@ -72,13 +92,24 @@ export async function POST(req: Request) {
     if (fileSize > maxSize) {
       return NextResponse.json(
         { 
-          error: `Ukuran file Anda (${(fileSize / (1024 * 1024)).toFixed(1)} MB) melebihi batas plan ${userPlan.toUpperCase()} (Maksimal ${maxMBLabel}). Silakan upgrade plan Anda!` 
+          error: `Ukuran file (${(fileSize / (1024 * 1024)).toFixed(1)} MB) melebihi batas plan ${userPlan.toUpperCase()} (Maksimal ${maxMBLabel}). Silakan upgrade plan Anda!` 
         },
         { status: 400 }
       );
     }
 
-    // Save temporary file to disk to measure duration & verify
+    // Read buffer to verify MP4 Magic Bytes (ftyp container marker)
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    if (!isMp4Buffer(buffer)) {
+      return NextResponse.json(
+        { error: 'Gagal mengunggah! File yang diunggah bukan merupakan struktur container MP4 asli (Magic Bytes ftyp mismatch).' },
+        { status: 400 }
+      );
+    }
+
+    // Save temporary file to disk
     const uploadDir = path.join(process.cwd(), 'uploads', 'videos');
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
@@ -87,15 +118,25 @@ export async function POST(req: Request) {
     const safeFilename = `${Date.now()}_${userId.slice(0, 8)}_${originalName.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
     const destinationPath = path.join(uploadDir, safeFilename);
 
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
     await fs.promises.writeFile(destinationPath, buffer);
 
-    // 3. Enforce Video Duration Limits per Plan
+    // 3. Verify Video Container with FFprobe
+    const { duration: durationSecs, formatName } = await getVideoInfo(destinationPath);
+
+    if (!formatName.includes('mp4') && !formatName.includes('mov') && !formatName.includes('3gp') && !formatName.includes('isom')) {
+      if (fs.existsSync(destinationPath)) {
+        fs.unlinkSync(destinationPath);
+      }
+      return NextResponse.json(
+        { error: 'FFprobe menolak file! Stream container bukan merupakan format MP4 yang valid.' },
+        { status: 400 }
+      );
+    }
+
+    // 4. Enforce Video Duration Limits per Plan
     // Free: 20 Min (1,200s)
     // Pro: 60 Min (3,600s)
     // Ultimate: 300 Min / 5h (18,000s)
-    const durationSecs = await getVideoDuration(destinationPath);
     let maxDurationSecs = 1200; // 20 mins
     let maxDurLabel = '20 Menit';
 
@@ -108,7 +149,6 @@ export async function POST(req: Request) {
     }
 
     if (durationSecs > maxDurationSecs) {
-      // Remove invalid uploaded file from disk
       if (fs.existsSync(destinationPath)) {
         fs.unlinkSync(destinationPath);
       }
@@ -135,7 +175,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       success: true,
-      message: 'Video MP4 berhasil diunggah ke Cloud Library!',
+      message: 'Video MP4 berhasil diverifikasi dan diunggah ke Cloud Library!',
       video: {
         ...videoRecord,
         sizeBytes: videoRecord.sizeBytes.toString(),

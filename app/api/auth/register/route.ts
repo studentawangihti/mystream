@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
-import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
+import { v4 as uuidv4 } from 'uuid';
 
 export async function POST(req: Request) {
   try {
@@ -14,48 +14,47 @@ export async function POST(req: Request) {
       );
     }
 
-    if (password.length < 6) {
-      return NextResponse.json(
-        { error: 'Password minimal 6 karakter.' },
-        { status: 400 }
-      );
-    }
+    const normalizedEmail = email.toLowerCase().trim();
 
     const existingUser = await prisma.user.findUnique({
-      where: { email: email.toLowerCase() },
+      where: { email: normalizedEmail },
     });
 
     if (existingUser) {
       return NextResponse.json(
-        { error: 'Email sudah terdaftar. Silakan login.' },
+        { error: 'Email sudah terdaftar. Silakan gunakan email lain atau login.' },
         { status: 400 }
       );
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const ingestKey = 'awg_live_' + crypto.randomBytes(6).toString('hex');
+    const ingestKey = `awg_live_${uuidv4().replace(/-/g, '').slice(0, 12)}`;
 
     const user = await prisma.user.create({
       data: {
-        name: name || email.split('@')[0],
-        email: email.toLowerCase(),
+        name: name || normalizedEmail.split('@')[0],
+        email: normalizedEmail,
         password: hashedPassword,
+        plan: 'free',
         ingestKey,
       },
     });
 
-    return NextResponse.json(
-      { 
-        success: true, 
-        message: 'Registrasi berhasil!', 
-        user: { id: user.id, name: user.name, email: user.email, ingestKey: user.ingestKey } 
+    return NextResponse.json({
+      success: true,
+      message: 'Registrasi berhasil! Silakan login.',
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        plan: user.plan,
+        ingestKey: user.ingestKey,
       },
-      { status: 201 }
-    );
+    });
   } catch (error: any) {
     console.error('Registration Error:', error);
     return NextResponse.json(
-      { error: 'Gagal mendaftar akun: ' + (error.message || 'Error Server') },
+      { error: error.message || 'Gagal mendaftar user baru.' },
       { status: 500 }
     );
   }

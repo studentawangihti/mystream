@@ -36,15 +36,23 @@ import {
   Clock,
   Gauge,
   Users,
-  ShieldCheck
+  ShieldCheck,
+  Crown,
+  Sparkles,
+  Zap
 } from 'lucide-react';
 
 interface Telemetry {
   fps: number;
-  bitrate: string;
+  bitrate: number;
   speed: string;
   duration: string;
-  networkStatus: 'excellent' | 'good' | 'warning' | 'offline';
+  durationSeconds: number;
+  resolution: string;
+  plan: string;
+  adStatus: string;
+  status: string;
+  errorMsg?: string;
 }
 
 interface Destination {
@@ -52,10 +60,8 @@ interface Destination {
   name: string;
   rtmpUrl: string;
   streamKey: string;
-  status: 'idle' | 'streaming' | 'error';
+  status: 'idle' | 'broadcasting' | 'error';
   errorMsg?: string;
-  startedAt?: string;
-  telemetry?: Telemetry;
 }
 
 interface FAQItem {
@@ -65,28 +71,24 @@ interface FAQItem {
 
 const faqData: FAQItem[] = [
   {
-    q: "Kenapa video preview loading hitam atau menampilkan error 'peer connection closed'?",
-    a: "WebRTC didesain untuk real-time video (< 0.5s delay) dan tidak mendukung H.264 video streams yang memiliki B-frames. Pada OBS Studio Anda, buka Settings > Output > ubah Output Mode ke Advanced. Pada tab Streaming, ubah 'Max B-frames' menjadi 0 (untuk encoder NVENC/AMD) atau ketik 'bframes=0' / 'tune=zerolatency' di kolom x264 Options."
+    q: "Apa perbedaan antara Free Plan, Pro Member, dan Ultimate VIP?",
+    a: "Free Plan mendukung hingga 2 platform target pada resolusi 720p HD dengan iklan & watermark. Pro Member (Rp 49rb/bln) mendukung hingga 4 platform target pada resolusi 1080p Full HD dengan 25% minimal iklan. Ultimate VIP (Rp 99rb/bln) mendukung hingga 8 platform target pada resolusi 4K Ultra HD 100% ad-free & watermark-free serta siaran 24/7 non-stop!"
   },
   {
-    q: "Apakah saya harus merestart MediaMTX ketika mengganti/merandomize Ingest Stream Key?",
-    a: "Tidak perlu. MediaMTX dikonfigurasi dengan path dinamis (all_others). Ketika Anda merandomize key di dashboard web, MediaMTX secara otomatis membuat jalur penyiaran baru secara realtime tanpa memerlukan restart server."
+    q: "Kenapa siaran live saya langsung terhenti otomatis (Auto-Reject)?",
+    a: "Jika Anda menggunakan Free Plan dan mengirim resolusi di atas 720p (seperti 1080p atau 4K dari OBS), server backend MyStream secara otomatis melakukan Auto-Reject (Auto-Kill) dalam 0.5 detik untuk menjaga kapasitas bandwidth server. Silakan ubah Output Resolution di OBS ke 720p (1280x720) atau upgrade plan Anda."
+  },
+  {
+    q: "Kenapa video preview loading hitam atau menampilkan error 'peer connection closed'?",
+    a: "WebRTC didesain untuk real-time video (< 0.5s delay) dan tidak mendukung H.264 video streams yang memiliki B-frames. Pada OBS Studio Anda, buka Settings > Output > ubah Output Mode ke Advanced. Pada tab Streaming, ubah 'Max B-frames' menjadi 0 (untuk encoder NVENC/AMD) atau ketik 'bframes=0' / 'tune=zerolatency' di kolom x264 Options."
   },
   {
     q: "Bagaimana cara melakukan konfigurasi OBS Studio ke sistem restreaming ini?",
     a: "Buka OBS Settings > Stream. Pilih Service ke 'Custom...'. Isi Server URL dengan 'rtmp://restream.awgverse.io/live' dan isi Stream Key dengan key unik akun Anda (contoh: awg_live_xxx). Tekan Apply, lalu klik Start Streaming."
   },
   {
-    q: "Berapa banyak platform tujuan (multistreaming) yang didukung?",
-    a: "Dashboard ini mendukung hingga 3 platform tujuan secara bersamaan (misal YouTube, Twitch, dan Facebook). Proses restreaming ini sangat hemat CPU (< 5% penggunaan CPU) karena backend Next.js memicu proses FFmpeg menggunakan parameter '-c copy' yang menyalin data stream video langsung tanpa melakukan re-encoding."
-  },
-  {
-    q: "Bagaimana cara melihat logs atau status dari proses restreaming?",
-    a: "Di dashboard bagian bawah terdapat modul 'FFmpeg Output Logs'. Anda dapat memilih platform tujuan dari dropdown di sebelah kanan judul log untuk memantau status upload data stream secara real-time."
-  },
-  {
-    q: "Bagaimana cara membuat gambar live stream di YouTube terlihat super tajam dan jernih (VP09 / AV1 Codec Trick)?",
-    a: "Jebakan 1080p (AVC1 Codec YouTube): Jika Anda mengirim resolusi 1920x1080 ke YouTube, YouTube secara default mengompresnya menggunakan codec AVC1 (kompresi lama yang agak buram pada gerakan cepat).\n\nTrik Ketajaman Maksimal (VP09 / AV1 Codec): Di OBS Settings > Video > ubah Output (Scaled) Resolution menjadi 2560x1440 (2K) atau 3840x2160 (4K). Naikkan Bitrate OBS ke 12.000 - 15.000 Kbps. Hasilnya: YouTube secara otomatis akan memberikan codec premium VP09 / AV1 untuk live stream Anda. Gambar di YouTube akan menjadi super tajam, bening, dan crystal-clear!"
+    q: "Berapa banyak platform tujuan yang didukung?",
+    a: "Free Plan mendukung hingga 2 platform. Pro Member mendukung hingga 4 platform. Ultimate VIP mendukung hingga 8 platform sekaligus secara bersamaan (YouTube, Twitch, Facebook, TikTok, dsb)."
   }
 ];
 
@@ -105,17 +107,29 @@ export default function Dashboard() {
   const [playerKey, setPlayerKey] = useState<number>(0);
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
   const [isFaqOpen, setIsFaqOpen] = useState<boolean>(false);
+  const [isPlanModalOpen, setIsPlanModalOpen] = useState<boolean>(false);
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('system');
   const [copiedServer, setCopiedServer] = useState<boolean>(false);
   const [copiedKey, setCopiedKey] = useState<boolean>(false);
   
+  // Live Telemetry state
+  const [telemetry, setTelemetry] = useState<Telemetry>({
+    fps: 0,
+    bitrate: 0,
+    speed: '0x',
+    duration: '00:00:00',
+    durationSeconds: 0,
+    resolution: 'N/A',
+    plan: 'free',
+    adStatus: 'Standby',
+    status: 'idle',
+  });
+
   // Auto-hiding header scroll states & sidebar minimize state
   const [showHeader, setShowHeader] = useState<boolean>(true);
   const [lastScrollY, setLastScrollY] = useState<number>(0);
   const [activeNav, setActiveNav] = useState<string>('studio');
   const [isSidebarMinimized, setIsSidebarMinimized] = useState<boolean>(false);
-
-  const logContainerRef = useRef<HTMLDivElement>(null);
 
   // Redirect to login if unauthenticated
   useEffect(() => {
@@ -124,7 +138,7 @@ export default function Dashboard() {
     }
   }, [sessionStatus, router]);
 
-  // Set user's permanent ingestKey from NextAuth session
+  // Set user's permanent ingestKey & plan from NextAuth session
   useEffect(() => {
     const sessionKey = (session?.user as any)?.ingestKey;
     if (sessionKey) {
@@ -181,7 +195,7 @@ export default function Dashboard() {
     return () => mediaQuery.removeEventListener('change', handleSystemThemeChange);
   }, [theme]);
 
-  // 1. Fetch Configuration & Status
+  // Fetch Stream Data & Telemetry
   const fetchData = async () => {
     if (sessionStatus !== 'authenticated') return;
     try {
@@ -192,6 +206,9 @@ export default function Dashboard() {
         if (data.destinations.length > 0 && !data.destinations.find((d: any) => d.id === selectedDestId)) {
           setSelectedDestId(data.destinations[0].id);
         }
+      }
+      if (data.telemetry) {
+        setTelemetry(data.telemetry);
       }
       if (data.ffmpegPath) {
         setFfmpegPath(data.ffmpegPath);
@@ -205,11 +222,13 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchData();
-  }, [sessionStatus]);
+    const interval = setInterval(fetchData, 3000);
+    return () => clearInterval(interval);
+  }, [sessionStatus, selectedDestId]);
 
-  // Handle Stream Key Reset with 24-hour rate limit quota
+  // Handle Stream Key Reset
   const handleRandomizeIngestKey = async () => {
-    if (isCurrentlyRestreaming) {
+    if (telemetry.status === 'broadcasting') {
       alert('Tidak dapat mengacak Stream Key saat siaran live sedang aktif.');
       return;
     }
@@ -220,9 +239,7 @@ export default function Dashboard() {
 
     setResetKeyLoading(true);
     try {
-      const res = await fetch('/api/user/reset-ingest-key', {
-        method: 'POST',
-      });
+      const res = await fetch('/api/user/reset-ingest-key', { method: 'POST' });
       const data = await res.json();
 
       if (!res.ok) {
@@ -244,183 +261,96 @@ export default function Dashboard() {
     }
   };
 
-  // 2. Poll Logs & Telemetry for the selected destination if streaming/error
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (sessionStatus !== 'authenticated' || !selectedDestId) return;
-
-    const fetchLogs = async () => {
-      try {
-        const res = await fetch('/api/restream', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'get_logs', id: selectedDestId })
-        });
-        const data = await res.json();
-        if (data.logs) {
-          setLogs(data.logs);
-          setDestinations(prev => prev.map(d => {
-            if (d.id === data.id) {
-              return { 
-                ...d, 
-                status: data.status, 
-                errorMsg: data.errorMsg,
-                telemetry: data.telemetry
-              };
-            }
-            return d;
-          }));
-        }
-      } catch (err) {
-        console.error('Error fetching logs:', err);
-      }
-    };
-
-    fetchLogs();
-    interval = setInterval(fetchLogs, 1500);
-
-    return () => {
-      clearInterval(interval);
-    };
-  }, [selectedDestId, sessionStatus]);
-
-  // Scroll to bottom of logs safely without moving whole window
-  useEffect(() => {
-    if (logContainerRef.current) {
-      logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
-    }
-  }, [logs]);
-
-  const reloadPlayer = () => {
-    setPlayerKey(prev => prev + 1);
-  };
-
-  // 4. Save Configurations
-  const handleSave = async (updatedDests = destinations) => {
-    setActionLoading(true);
+  // Switch Plan (Free, Pro, Ultimate)
+  const handleSwitchPlan = async (newPlan: 'free' | 'pro' | 'ultimate') => {
     try {
-      const res = await fetch('/api/restream', {
+      const res = await fetch('/api/user/plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'save_destinations',
-          destinations: updatedDests
-        })
+        body: JSON.stringify({ plan: newPlan }),
       });
       const data = await res.json();
-      if (data.destinations) {
-        setDestinations(data.destinations);
+
+      if (!res.ok) {
+        alert(data.error || 'Gagal merubah plan membership');
+        return;
       }
+
+      await updateSession({ plan: newPlan });
+      fetchData();
+      setIsPlanModalOpen(false);
+      alert(`Selamat! Akun Anda kini berstatus ${newPlan.toUpperCase()}!`);
     } catch (err) {
-      console.error('Failed to save settings:', err);
-      alert('Gagal menyimpan konfigurasi');
-    } finally {
-      setActionLoading(false);
+      console.error('Switch plan error:', err);
+      alert('Terjadi kesalahan saat merubah plan');
     }
   };
 
-  // 5. Add / Delete Destinations
+  // Add Target Platform
   const handleAddDestination = () => {
-    if (destinations.length >= 3) {
-      alert('Maksimal 3 destinasi multistreaming diizinkan.');
+    const currentPlan = (session?.user as any)?.plan || 'free';
+    const maxPlatforms = currentPlan === 'ultimate' ? 8 : currentPlan === 'pro' ? 4 : 2;
+
+    if (destinations.length >= maxPlatforms) {
+      alert(`Plan Anda (${currentPlan.toUpperCase()}) dibatasi maksimal ${maxPlatforms} platform target. Silakan upgrade plan Anda untuk menambah lebih banyak platform!`);
+      setIsPlanModalOpen(true);
       return;
     }
-    const newId = `custom_${Date.now()}`;
-    const newDest: Destination = {
-      id: newId,
-      name: 'Platform Kustom',
-      rtmpUrl: '',
-      streamKey: '',
-      status: 'idle'
-    };
-    const updated = [...destinations, newDest];
-    setDestinations(updated);
-    setSelectedDestId(newId);
+
+    const newId = Date.now().toString();
+    setDestinations([
+      ...destinations,
+      {
+        id: newId,
+        name: `Platform Baru ${destinations.length + 1}`,
+        rtmpUrl: 'rtmp://a.rtmp.youtube.com/live2',
+        streamKey: '',
+        status: 'idle',
+      },
+    ]);
   };
 
-  const handleDeleteDestination = (id: string) => {
-    const updated = destinations.filter(d => d.id !== id);
-    setDestinations(updated);
-    if (selectedDestId === id && updated.length > 0) {
-      setSelectedDestId(updated[0].id);
+  // Remove Target Platform
+  const handleRemoveDestination = (id: string) => {
+    if (destinations.length <= 1) {
+      alert('Minimal harus ada 1 platform tujuan.');
+      return;
     }
-    handleSave(updated);
+    setDestinations(destinations.filter((d) => d.id !== id));
   };
 
-  const handleFieldChange = (id: string, field: keyof Destination, value: string) => {
-    setDestinations(prev => prev.map(d => {
-      if (d.id === id) {
-        return { ...d, [field]: value };
-      }
-      return d;
-    }));
-  };
+  // Handle Start / Stop Restream
+  const handleToggleRestream = async () => {
+    const isRunning = telemetry.status === 'broadcasting';
+    const action = isRunning ? 'stop_all' : 'start_all';
 
-  const handleGenerateKey = (id: string) => {
-    const randomKey = 'live_' + Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 10);
-    handleFieldChange(id, 'streamKey', randomKey);
-  };
-
-  // 6. Restream Control (Start / Stop)
-  const handleStartRestream = async () => {
-    await handleSave();
     setActionLoading(true);
     try {
       const res = await fetch('/api/restream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          action: 'start',
-          ingestKey: ingestKey
-        })
+        body: JSON.stringify({ action }),
       });
       const data = await res.json();
-      if (data.destinations) {
-        setDestinations(data.destinations);
-      }
-      if (data.errors && data.errors.length > 0) {
-        alert(`Beberapa platform gagal start:\n${data.errors.join('\n')}`);
+
+      if (!res.ok) {
+        alert(data.error || 'Gagal menjalankan aksi restream.');
+        if (data.error?.includes('dibatasi')) {
+          setIsPlanModalOpen(true);
+        }
+      } else {
+        alert(data.message);
+        fetchData();
       }
     } catch (err) {
-      console.error('Failed to start restream:', err);
+      console.error('Toggle restream error:', err);
+      alert('Terjadi kesalahan saat memproses permintaan restream.');
     } finally {
       setActionLoading(false);
     }
   };
 
-  const handleStopRestream = async (targetId?: string) => {
-    setActionLoading(true);
-    try {
-      const res = await fetch('/api/restream', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'stop', targetId })
-      });
-      const data = await res.json();
-      if (data.destinations) {
-        setDestinations(data.destinations);
-      }
-    } catch (err) {
-      console.error('Failed to stop restream:', err);
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const toggleFaq = (index: number) => {
-    setOpenFaqIndex(prev => (prev === index ? null : index));
-  };
-
-  const isCurrentlyRestreaming = destinations.some(d => d.status === 'streaming');
-  const activeStreamsCount = destinations.filter(d => d.status === 'streaming').length;
-  
-  // Aggregate live telemetry stats
-  const activeDest = destinations.find(d => d.id === selectedDestId);
-  const activeBitrate = activeDest?.telemetry?.bitrate || '0kbits/s';
-  const activeFps = activeDest?.telemetry?.fps || (isCurrentlyRestreaming ? 60 : 0);
-  const activeDuration = activeDest?.telemetry?.duration || '00:00:00';
-  const activeNetworkStatus = activeDest?.telemetry?.networkStatus || (isCurrentlyRestreaming ? 'excellent' : 'offline');
-
+  // Copy Clipboard Helper
   const copyToClipboard = (text: string, type: 'server' | 'key') => {
     navigator.clipboard.writeText(text);
     if (type === 'server') {
@@ -432,691 +362,637 @@ export default function Dashboard() {
     }
   };
 
-  const getPlatformType = (dest: Destination) => {
-    const url = (dest.rtmpUrl || '').toLowerCase();
-    const name = (dest.name || '').toLowerCase();
-    if (url.includes('youtube') || name.includes('youtube')) return 'youtube';
-    if (url.includes('twitch') || name.includes('twitch')) return 'twitch';
-    if (url.includes('facebook') || name.includes('facebook')) return 'facebook';
-    return 'custom';
-  };
-
-  const scrollToSection = (id: string) => {
-    setActiveNav(id);
-    const element = document.getElementById(id);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth' });
-    }
-  };
-
-  if (sessionStatus === 'loading' || (sessionStatus === 'authenticated' && loading)) {
+  if (sessionStatus === 'loading' || loading) {
     return (
-      <div style={{ display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center', backgroundColor: '#06060a' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
-          <RotateCw className="animate-spin" style={{ animation: 'spin 1.5s linear infinite', color: '#6366f1' }} size={44} />
-          <p style={{ color: '#94a3b8', fontSize: '0.95rem', fontWeight: 600 }}>Memuat Command Center Studio...</p>
+      <div style={{ display: 'flex', minHeight: '100vh', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--bg-main)', color: 'var(--text-primary)' }}>
+        <div style={{ textAlign: 'center' }}>
+          <RotateCw style={{ animation: 'spin 1s linear infinite', width: '36px', height: '36px', color: 'var(--accent-color)' }} />
+          <p style={{ marginTop: '16px', fontSize: '15px', fontWeight: 500 }}>Memuat Studio Dashboard...</p>
         </div>
-        <style dangerouslySetInnerHTML={{__html: `
-          @keyframes spin {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-          }
-        `}} />
       </div>
     );
   }
 
-  if (sessionStatus === 'unauthenticated') {
-    return null;
-  }
+  const userPlan = (session?.user as any)?.plan || 'free';
+  const isCurrentlyRestreaming = telemetry.status === 'broadcasting';
 
   return (
-    <div className="app-container">
-      {/* Auto-Hiding Header Bar */}
-      <header className={`app-header ${!showHeader ? 'header-hidden' : ''}`}>
-        <div className="logo-section">
-          <div className="logo-icon-wrapper">
-            <Radio size={22} style={{ color: '#fff' }} />
+    <div className="studio-layout">
+      {/* Sidebar Section */}
+      <aside className={`studio-sidebar ${isSidebarMinimized ? 'minimized' : ''}`}>
+        <div className="sidebar-brand">
+          <div className="brand-logo">
+            <Radio size={20} color="#ffffff" />
           </div>
-          <span>MyStream Studio</span>
-          <span className="logo-badge">Broadcast Engine</span>
+          {!isSidebarMinimized && (
+            <div className="brand-text">
+              <span className="brand-title">MyStream Studio</span>
+              <span className="brand-badge">BROADCAST ENGINE</span>
+            </div>
+          )}
+          <button 
+            className="sidebar-toggle-btn"
+            onClick={() => setIsSidebarMinimized(!isSidebarMinimized)}
+            title={isSidebarMinimized ? "Expand Sidebar" : "Minimize Sidebar"}
+          >
+            {isSidebarMinimized ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+          </button>
         </div>
-        
-        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-          {/* Telemetry Chips */}
-          <div className="telemetry-bar">
-            <div className="telemetry-chip">
-              <Cpu size={14} style={{ color: 'var(--primary)' }} />
-              <span>Pass-through:</span>
-              <span className="telemetry-chip-val" style={{ color: 'var(--secondary)' }}>-c copy (Zero CPU)</span>
+
+        <nav className="sidebar-menu">
+          {!isSidebarMinimized && <span className="menu-category">NAVIGATION</span>}
+          <button 
+            className={`menu-item ${activeNav === 'studio' ? 'active' : ''}`}
+            onClick={() => setActiveNav('studio')}
+            title="Studio Feed"
+          >
+            <Tv size={18} />
+            {!isSidebarMinimized && <span>Studio Feed</span>}
+          </button>
+          
+          <button 
+            className={`menu-item ${activeNav === 'analytics' ? 'active' : ''}`}
+            onClick={() => setActiveNav('analytics')}
+            title="Analitik Live"
+          >
+            <BarChart3 size={18} />
+            {!isSidebarMinimized && <span>Analitik Live</span>}
+          </button>
+
+          <button 
+            className={`menu-item ${activeNav === 'ingest' ? 'active' : ''}`}
+            onClick={() => setActiveNav('ingest')}
+            title="Ingest OBS"
+          >
+            <Radio size={18} />
+            {!isSidebarMinimized && <span>Ingest OBS</span>}
+          </button>
+
+          <button 
+            className={`menu-item ${activeNav === 'destinations' ? 'active' : ''}`}
+            onClick={() => setActiveNav('destinations')}
+            title="Platform Target"
+          >
+            <Layers size={18} />
+            {!isSidebarMinimized && <span>Platform Target</span>}
+          </button>
+
+          <button 
+            className={`menu-item ${activeNav === 'faq' ? 'active' : ''}`}
+            onClick={() => setIsFaqOpen(true)}
+            title="Buka FAQ"
+          >
+            <HelpCircle size={18} />
+            {!isSidebarMinimized && <span>Buka FAQ</span>}
+          </button>
+        </nav>
+
+        {!isSidebarMinimized && (
+          <div className="sidebar-telemetry">
+            <span className="telemetry-title">TELEMETRY</span>
+            <div className="telemetry-item">
+              <span className="label">FFmpeg Path:</span>
+              <span className="value truncate" title={ffmpegPath}>{ffmpegPath}</span>
             </div>
-            
-            <div className="telemetry-chip">
-              <Activity size={14} style={{ color: 'var(--primary)' }} />
-              <span>Active Targets:</span>
-              <span className="telemetry-chip-val">{activeStreamsCount} / {destinations.length}</span>
+            <div className="telemetry-item">
+              <span className="label">Ingest Server:</span>
+              <span className="value">rtmp://restream.awgverse.io/live</span>
             </div>
+            <div className="telemetry-item">
+              <span className="label">Plan Membership:</span>
+              <span className="value uppercase font-bold" style={{ color: userPlan === 'ultimate' ? '#eab308' : userPlan === 'pro' ? '#6366f1' : '#94a3b8' }}>
+                {userPlan} PLAN
+              </span>
+            </div>
+          </div>
+        )}
+      </aside>
+
+      {/* Main Content Area */}
+      <div className="studio-container">
+        {/* Auto-Hiding Top Header */}
+        <header className={`studio-header ${!showHeader ? 'header-hidden' : ''}`}>
+          <div className="header-left">
+            <div className="header-logo">
+              <Radio size={22} color="#ffffff" />
+            </div>
+            <span className="header-title">MyStream Studio</span>
+            <span className="header-version">BROADCAST ENGINE</span>
           </div>
 
-          {/* User Profile Pill & Sign Out */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'rgba(255,255,255,0.04)', padding: '4px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: '700', fontSize: '0.8rem' }}>
+          <div className="header-right">
+            <div className="server-status-pill">
+              <Cpu size={14} color="#10b981" />
+              <span>Pass-through: <strong>-c copy (Zero CPU)</strong></span>
+            </div>
+
+            <div className="server-status-pill">
+              <Radio size={14} color="#6366f1" />
+              <span>Active Targets: <strong>{destinations.length} / {userPlan === 'ultimate' ? 8 : userPlan === 'pro' ? 4 : 2}</strong></span>
+            </div>
+
+            {/* Plan Badge & Switcher Button */}
+            <button 
+              className={`plan-badge-btn ${userPlan}`}
+              onClick={() => setIsPlanModalOpen(true)}
+              title="Klik untuk ubah/upgrade plan membership"
+            >
+              {userPlan === 'ultimate' ? <Crown size={14} /> : userPlan === 'pro' ? <Sparkles size={14} /> : <Zap size={14} />}
+              <span className="uppercase font-bold">{userPlan} PLAN</span>
+            </button>
+
+            {/* Profile Menu */}
+            <div className="user-profile-menu">
+              <div className="user-avatar">
                 {session?.user?.name ? session.user.name[0].toUpperCase() : 'U'}
               </div>
-              <span style={{ fontSize: '0.85rem', fontWeight: '700', color: 'var(--text-primary)' }}>
-                {session?.user?.name || 'Studio User'}
-              </span>
+              <span className="user-name">{session?.user?.name || 'Studio User'}</span>
+              <button 
+                className="logout-btn" 
+                onClick={() => signOut({ callbackUrl: '/login' })}
+                title="Keluar / Sign Out"
+              >
+                <LogOut size={14} />
+                <span>Keluar</span>
+              </button>
+            </div>
+
+            {/* Theme Toggle Buttons */}
+            <div className="theme-toggle-group">
+              <button 
+                className={`theme-btn ${theme === 'light' ? 'active' : ''}`}
+                onClick={() => setTheme('light')}
+                title="Mode Terang (Light Mode)"
+              >
+                ☀️ Light
+              </button>
+              <button 
+                className={`theme-btn ${theme === 'dark' ? 'active' : ''}`}
+                onClick={() => setTheme('dark')}
+                title="Mode Gelap (Dark Mode)"
+              >
+                🌙 Dark
+              </button>
+              <button 
+                className={`theme-btn ${theme === 'system' ? 'active' : ''}`}
+                onClick={() => setTheme('system')}
+                title="Ikuti Tema Sistem Windows"
+              >
+                💻 System
+              </button>
+            </div>
+          </div>
+        </header>
+
+        {/* Main Dashboard Content */}
+        <main className="studio-content">
+
+          {/* Auto-Reject Alert Banner if Resolution Exceeded */}
+          {telemetry.status === 'error' && telemetry.errorMsg && (
+            <div className="auto-reject-banner">
+              <AlertTriangle size={24} style={{ flexShrink: 0 }} />
+              <div style={{ flex: 1 }}>
+                <h4 style={{ fontWeight: 700, margin: '0 0 4px 0', fontSize: '15px' }}>Auto-Reject Proteksi Bandwidth Aktif!</h4>
+                <p style={{ margin: 0, fontSize: '13.5px', opacity: 0.95 }}>{telemetry.errorMsg}</p>
+              </div>
+              <button className="upgrade-now-btn" onClick={() => setIsPlanModalOpen(true)}>
+                <Crown size={14} /> Upgrade Plan Sekarang
+              </button>
+            </div>
+          )}
+
+          {/* Top Master Restream Bar */}
+          <div className="master-control-bar card">
+            <div className="control-bar-info">
+              <div className={`status-indicator ${isCurrentlyRestreaming ? 'live' : 'standby'}`}>
+                <span className="pulse-dot"></span>
+                <span>{isCurrentlyRestreaming ? 'LIVE BROADCASTING' : 'STANDBY'}</span>
+              </div>
+              <div className="control-bar-text">
+                <h3>{isCurrentlyRestreaming ? 'Sistem Sedang Menyiarkan Feed Live' : 'Sistem Siap Menyiarkan'}</h3>
+                <p>{isCurrentlyRestreaming ? `Restreaming aktif ke ${destinations.length} platform target.` : 'Hubungkan OBS Studio dan tekan Mulai Restreaming'}</p>
+              </div>
             </div>
 
             <button
-              className="btn btn-secondary"
-              onClick={() => signOut({ callbackUrl: '/login' })}
-              style={{ padding: '4px 8px', fontSize: '0.75rem' }}
-              title="Keluar / Sign Out"
+              className={`master-stream-btn ${isCurrentlyRestreaming ? 'stop' : 'start'}`}
+              onClick={handleToggleRestream}
+              disabled={actionLoading}
             >
-              <LogOut size={14} /> Keluar
+              {actionLoading ? (
+                <RotateCw className="spin" size={18} />
+              ) : isCurrentlyRestreaming ? (
+                <>
+                  <Square size={18} />
+                  <span>Hentikan Restreaming</span>
+                </>
+              ) : (
+                <>
+                  <Play size={18} />
+                  <span>Mulai Restreaming</span>
+                </>
+              )}
             </button>
           </div>
 
-          {/* Theme Selector */}
-          <div className="theme-toggle-group">
-            <button 
-              className={`theme-btn ${theme === 'light' ? 'active' : ''}`}
-              onClick={() => setTheme('light')}
-              title="Tema Terang"
-            >
-              ☀️ Light
-            </button>
-            <button 
-              className={`theme-btn ${theme === 'dark' ? 'active' : ''}`}
-              onClick={() => setTheme('dark')}
-              title="Tema Gelap"
-            >
-              🌙 Dark
-            </button>
-            <button 
-              className={`theme-btn ${theme === 'system' ? 'active' : ''}`}
-              onClick={() => setTheme('system')}
-              title="Ikuti Sistem OS"
-            >
-              💻 System
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* Body Wrapper with Minimizable Left Sidebar */}
-      <div className="app-body-wrapper">
-        {/* Left Vertical Navigation Sidebar */}
-        <aside className={`app-sidebar ${isSidebarMinimized ? 'minimized' : ''}`}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: isSidebarMinimized ? 'center' : 'space-between', padding: '0 2px' }}>
-            {!isSidebarMinimized && <span className="sidebar-section-title">Navigation</span>}
-            <button 
-              className="btn btn-secondary" 
-              onClick={() => setIsSidebarMinimized(!isSidebarMinimized)}
-              style={{ padding: '6px', borderRadius: '6px' }}
-              title={isSidebarMinimized ? "Expand Sidebar" : "Minimize Sidebar"}
-            >
-              {isSidebarMinimized ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-            </button>
-          </div>
-          
-          <ul className="sidebar-nav-list">
-            <li>
-              <a 
-                className={`sidebar-nav-item ${activeNav === 'studio' ? 'active' : ''}`}
-                onClick={() => scrollToSection('sec-monitor')}
-                title="Studio Feed"
-              >
-                <Tv size={18} />
-                <span className="sidebar-nav-text">Studio Feed</span>
-              </a>
-            </li>
-            <li>
-              <a 
-                className={`sidebar-nav-item ${activeNav === 'analytics' ? 'active' : ''}`}
-                onClick={() => scrollToSection('sec-analytics')}
-                title="Analitik Live"
-              >
-                <BarChart3 size={18} />
-                <span className="sidebar-nav-text">Analitik Live</span>
-              </a>
-            </li>
-            <li>
-              <a 
-                className={`sidebar-nav-item ${activeNav === 'ingest' ? 'active' : ''}`}
-                onClick={() => scrollToSection('sec-ingest')}
-                title="Ingest OBS"
-              >
-                <Settings size={18} />
-                <span className="sidebar-nav-text">Ingest OBS</span>
-              </a>
-            </li>
-            <li>
-              <a 
-                className={`sidebar-nav-item ${activeNav === 'destinations' ? 'active' : ''}`}
-                onClick={() => scrollToSection('sec-destinations')}
-                title="Platform Target"
-              >
-                <Layers size={18} />
-                <span className="sidebar-nav-text">Platform Target</span>
-              </a>
-            </li>
-            <li>
-              <a 
-                className={`sidebar-nav-item ${activeNav === 'logs' ? 'active' : ''}`}
-                onClick={() => scrollToSection('sec-logs')}
-                title="Process Logs"
-              >
-                <Terminal size={18} />
-                <span className="sidebar-nav-text">Process Logs</span>
-              </a>
-            </li>
-            <li>
-              <a 
-                className="sidebar-nav-item"
-                onClick={() => setIsFaqOpen(true)}
-                title="FAQ & Guide"
-              >
-                <HelpCircle size={18} />
-                <span className="sidebar-nav-text">Buka FAQ</span>
-              </a>
-            </li>
-          </ul>
-
-          {!isSidebarMinimized && (
-            <div style={{ marginTop: 'auto', paddingTop: '16px', borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div className="sidebar-section-title">Telemetry</div>
-              <div className="sidebar-telemetry-text" style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', padding: '0 12px' }}>
-                FFmpeg Path:<br/>
-                <code style={{ fontSize: '0.72rem', color: 'var(--text-primary)' }}>{ffmpegPath || 'detecting...'}</code>
-              </div>
-            </div>
-          )}
-        </aside>
-
-        {/* Main Grid Content */}
-        <main className="main-content">
-          {/* Left Column: Live Monitor, Analytics & Logs */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
-            
-            {/* Master Control Card */}
-            <div className="card master-control-card">
-              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                  <span className={`status-live-badge ${isCurrentlyRestreaming ? 'status-live-active' : 'status-live-idle'}`}>
-                    <span className={isCurrentlyRestreaming ? "live-pulse" : ""} style={{
-                      width: '10px', height: '10px', 
-                      borderRadius: '50%', 
-                      backgroundColor: isCurrentlyRestreaming ? 'var(--danger)' : '#64748b'
-                    }} />
-                    {isCurrentlyRestreaming ? "LIVE BROADCASTING" : "STANDBY"}
-                  </span>
-
-                  <div>
-                    <h1 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                      {isCurrentlyRestreaming ? "Master Multistreaming Aktif" : "Sistem Siap Menyiarkan"}
-                    </h1>
-                    <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                      {isCurrentlyRestreaming 
-                        ? `Menyalurkan sinyal ke ${activeStreamsCount} destinasi platform serentak` 
-                        : "Hubungkan OBS Studio dan tekan Mulai Restreaming"}
-                    </p>
-                  </div>
-                </div>
-
-                <div>
-                  {isCurrentlyRestreaming ? (
-                    <button 
-                      className="btn btn-danger" 
-                      onClick={() => handleStopRestream()} 
-                      disabled={actionLoading}
-                    >
-                      <Square size={16} /> Hentikan Semua Stream
-                    </button>
-                  ) : (
-                    <button 
-                      className="btn btn-primary" 
-                      onClick={handleStartRestream} 
-                      disabled={actionLoading || destinations.length === 0 || !destinations.some(d => d.rtmpUrl && d.streamKey)}
-                    >
-                      <Play size={16} /> Mulai Restreaming
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Live Analytics Module (Real-Time Metrics) */}
-            <div id="sec-analytics" className="card">
+          {/* Live Telemetry Module Card */}
+          <div className="card telemetry-module-card">
+            <div className="card-header">
               <div className="card-title">
-                <BarChart3 size={18} style={{ color: 'var(--primary)' }} />
+                <BarChart3 size={18} color="var(--accent-color)" />
                 <span>Analitik Broadcast & Kualitas Jaringan Live</span>
               </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
-                {/* Duration Gauge */}
-                <div style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-secondary)', fontSize: '0.8rem', fontWeight: '700' }}>
-                    <Clock size={16} style={{ color: 'var(--primary)' }} />
-                    DURASI LIVE
-                  </div>
-                  <div style={{ fontSize: '1.4rem', fontWeight: '800', fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
-                    {activeDuration}
-                  </div>
-                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                    {isCurrentlyRestreaming ? '⏱️ Sesi streaming berjalan' : '⏸️ Standby'}
-                  </div>
-                </div>
-
-                {/* Bitrate Gauge */}
-                <div style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-secondary)', fontSize: '0.8rem', fontWeight: '700' }}>
-                    <Gauge size={16} style={{ color: 'var(--secondary)' }} />
-                    INGEST BITRATE
-                  </div>
-                  <div style={{ fontSize: '1.4rem', fontWeight: '800', fontFamily: 'var(--font-mono)', color: 'var(--secondary)' }}>
-                    {activeBitrate}
-                  </div>
-                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                    📊 Transfer data real-time
-                  </div>
-                </div>
-
-                {/* FPS Gauge */}
-                <div style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-secondary)', fontSize: '0.8rem', fontWeight: '700' }}>
-                    <Activity size={16} style={{ color: 'var(--primary)' }} />
-                    FRAME RATE (FPS)
-                  </div>
-                  <div style={{ fontSize: '1.4rem', fontWeight: '800', fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
-                    {activeFps} FPS
-                  </div>
-                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                    🎯 Target: 60.0 FPS
-                  </div>
-                </div>
-
-                {/* Network Quality Gauge */}
-                <div style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-secondary)', fontSize: '0.8rem', fontWeight: '700' }}>
-                    <Wifi size={16} style={{ color: activeNetworkStatus === 'excellent' ? 'var(--secondary)' : (activeNetworkStatus === 'warning' ? 'var(--danger)' : 'var(--text-muted)') }} />
-                    KUALITAS JARINGAN
-                  </div>
-                  <div style={{ fontSize: '1.1rem', fontWeight: '800', color: activeNetworkStatus === 'excellent' ? 'var(--secondary)' : (activeNetworkStatus === 'warning' ? 'var(--danger)' : 'var(--text-muted)') }}>
-                    {activeNetworkStatus === 'excellent' ? '🟢 Sempurna (0% Drop)' : (activeNetworkStatus === 'good' ? '🟡 Stabil' : (activeNetworkStatus === 'warning' ? '🔴 Sinyal Terganggu' : '⚪ Offline'))}
-                  </div>
-                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                    ⚡ Zero Packet Loss
-                  </div>
-                </div>
-              </div>
+              <span className="ad-status-badge" style={{ backgroundColor: userPlan === 'ultimate' ? 'rgba(234, 179, 8, 0.15)' : userPlan === 'pro' ? 'rgba(99, 102, 241, 0.15)' : 'rgba(148, 163, 184, 0.15)', color: userPlan === 'ultimate' ? '#eab308' : userPlan === 'pro' ? '#6366f1' : '#94a3b8' }}>
+                {telemetry.adStatus}
+              </span>
             </div>
 
-            {/* Live Stream Video Monitor */}
-            <div id="sec-monitor" className="card">
-              <div className="card-title">
-                <Video size={18} style={{ color: 'var(--primary)' }} />
-                <span>Live Monitor Feed (WebRTC Low Latency)</span>
-                <button 
-                  className="btn btn-secondary" 
-                  onClick={reloadPlayer} 
-                  style={{ marginLeft: 'auto', padding: '6px 12px', fontSize: '0.78rem' }}
-                >
-                  <RotateCw size={12} /> Reload Feed
-                </button>
-              </div>
-
-              <div className="video-wrapper">
-                <div className="video-overlay-badge">
-                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--secondary)' }} />
-                  WHEP WebRTC (&lt; 0.5s)
+            <div className="telemetry-grid">
+              <div className="telemetry-card">
+                <div className="card-metric-icon">
+                  <Clock size={20} color="#6366f1" />
                 </div>
-                <iframe 
-                  key={playerKey}
-                  src={`http://localhost:8889/live/${ingestKey}/`}
-                  style={{ width: '100%', height: '100%', border: 'none', background: '#000' }}
-                  allow="autoplay; fullscreen"
-                />
-              </div>
-
-              <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span>Video codec: <code style={{ color: 'var(--text-primary)' }}>H.264 / AAC (Pass-through)</code></span>
-                <span>MediaMTX WebRTC Port: <code style={{ color: 'var(--text-primary)' }}>8889</code></span>
-              </div>
-            </div>
-
-            {/* Ingest Key Credentials Card */}
-            <div id="sec-ingest" className="card">
-              <div className="card-title">
-                <Settings size={18} style={{ color: 'var(--primary)' }} />
-                <span>Konfigurasi Ingest Server OBS (Publik)</span>
-                
-                <span style={{ marginLeft: 'auto', fontSize: '0.75rem', background: 'rgba(99, 102, 241, 0.15)', color: 'var(--primary)', padding: '2px 8px', borderRadius: '12px', border: '1px solid rgba(99, 102, 241, 0.3)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <ShieldCheck size={12} /> Stream Key Permanen Unik
-                </span>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '16px' }}>
-                <div className="form-group">
-                  <label className="form-label">Server URL (OBS Custom Service)</label>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <input 
-                      type="text" 
-                      readOnly 
-                      className="input-text" 
-                      style={{ flex: 1, fontFamily: 'var(--font-mono)', fontWeight: '700', color: 'var(--secondary)' }}
-                      value="rtmp://restream.awgverse.io/live"
-                    />
-                    <button 
-                      className="btn btn-secondary" 
-                      onClick={() => copyToClipboard("rtmp://restream.awgverse.io/live", 'server')}
-                      style={{ padding: '0 14px' }}
-                      title="Copy Server URL"
-                    >
-                      {copiedServer ? <Check size={14} style={{ color: 'var(--secondary)' }} /> : <Copy size={14} />}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Stream Key Akun Anda (Permanen Unik)</label>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <input 
-                      type="text" 
-                      readOnly 
-                      className="input-text" 
-                      style={{ flex: 1, fontWeight: '700', fontFamily: 'var(--font-mono)', letterSpacing: '0.04em' }}
-                      value={ingestKey}
-                    />
-                    <button 
-                      className="btn btn-secondary" 
-                      onClick={() => copyToClipboard(ingestKey, 'key')}
-                      style={{ padding: '0 14px' }}
-                      title="Copy Stream Key"
-                    >
-                      {copiedKey ? <Check size={14} style={{ color: 'var(--secondary)' }} /> : <Copy size={14} />}
-                    </button>
-                    <button 
-                      className="btn btn-primary" 
-                      onClick={handleRandomizeIngestKey}
-                      disabled={isCurrentlyRestreaming || resetKeyLoading}
-                      style={{ padding: '0 14px' }}
-                      title="Acak Key Baru (Kuota 1x / 24 Jam)"
-                    >
-                      {resetKeyLoading ? <RotateCw size={14} className="animate-spin" /> : '🎲 Acak Key (1x/Hari)'}
-                    </button>
-                  </div>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
-                    💡 Kuota acak Stream Key: Maksimal 1x per 24 jam untuk keamanan akun Anda.
+                <div className="card-metric-data">
+                  <span className="metric-label">DURASI LIVE</span>
+                  <span className="metric-value font-mono">{telemetry.duration}</span>
+                  <span className="metric-subtext">
+                    {userPlan === 'free' ? 'Max 4 Jam per Sesi (Free)' : 'Unlimited 24/7 Non-Stop'}
                   </span>
                 </div>
               </div>
-            </div>
 
-            {/* Logs Terminal */}
-            <div id="sec-logs" className="card">
-              <div className="card-title">
-                <Terminal size={18} style={{ color: 'var(--primary)' }} />
-                <span>FFmpeg Process Output Logs</span>
-                
-                <select 
-                  className="select-box" 
-                  value={selectedDestId} 
-                  onChange={(e) => setSelectedDestId(e.target.value)}
-                  style={{ marginLeft: 'auto' }}
-                >
-                  {destinations.map(d => (
-                    <option key={d.id} value={d.id}>{d.name} ({d.status})</option>
-                  ))}
-                </select>
+              <div className="telemetry-card">
+                <div className="card-metric-icon">
+                  <Gauge size={20} color="#10b981" />
+                </div>
+                <div className="card-metric-data">
+                  <span className="metric-label">INGEST BITRATE</span>
+                  <span className="metric-value">{telemetry.bitrate} <small>Kbps</small></span>
+                  <span className="metric-subtext">
+                    {userPlan === 'free' ? 'Max 4.500 Kbps Limit' : userPlan === 'pro' ? 'Max 10.000 Kbps' : 'Max 35.000 Kbps (4K)'}
+                  </span>
+                </div>
               </div>
 
-              <div ref={logContainerRef} className="log-container">
-                {logs.length === 0 ? (
-                  <div style={{ color: 'var(--text-muted)', textAlign: 'center', paddingTop: '80px' }}>
-                    Belum ada log output. {isCurrentlyRestreaming ? "Menunggu status..." : "Klik Mulai Restreaming untuk memulai."}
-                  </div>
-                ) : (
-                  logs.map((log, idx) => {
-                    let isErr = log.toLowerCase().includes('error') || log.toLowerCase().includes('failed');
-                    let isSys = log.startsWith('[System]') || log.startsWith('[STDOUT]');
-                    let className = "log-line";
-                    if (isErr) className += " log-line-err";
-                    else if (isSys) className += " log-line-sys";
-                    
-                    return (
-                      <div key={idx} className={className}>
-                        {log}
-                      </div>
-                    );
-                  })
-                )}
+              <div className="telemetry-card">
+                <div className="card-metric-icon">
+                  <Activity size={20} color="#f59e0b" />
+                </div>
+                <div className="card-metric-data">
+                  <span className="metric-label">FRAME RATE / RESOLUSI</span>
+                  <span className="metric-value">{telemetry.fps} <small>FPS</small> | <small style={{ fontSize: '13px', fontWeight: 600 }}>{telemetry.resolution}</small></span>
+                  <span className="metric-subtext">
+                    Target Max: {userPlan === 'free' ? '720p HD' : userPlan === 'pro' ? '1080p FHD' : '4K Ultra HD'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="telemetry-card">
+                <div className="card-metric-icon">
+                  <Wifi size={20} color={isCurrentlyRestreaming ? "#10b981" : "#64748b"} />
+                </div>
+                <div className="card-metric-data">
+                  <span className="metric-label">KUALITAS JARINGAN</span>
+                  <span className="metric-value" style={{ color: isCurrentlyRestreaming ? '#10b981' : '#64748b' }}>
+                    {isCurrentlyRestreaming ? '🟢 Sempurna' : '⚪ Offline'}
+                  </span>
+                  <span className="metric-subtext">⚡ Zero Packet Loss</span>
+                </div>
               </div>
             </div>
-
           </div>
 
-          {/* Right Column: Platform Destinations Control */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
-            
-            {/* Destinations Stack */}
-            <div id="sec-destinations" className="card">
-              <div className="card-title">
-                <Tv size={18} style={{ color: 'var(--primary)' }} />
-                <span>Target Platform (Maksimal 3)</span>
-                
-                <button 
-                  className="btn btn-secondary" 
-                  onClick={handleAddDestination}
-                  disabled={destinations.length >= 3}
-                  style={{ marginLeft: 'auto', padding: '6px 12px', fontSize: '0.78rem' }}
-                >
-                  <Plus size={14} /> Tambah Platform
-                </button>
-              </div>
+          {/* Grid Layout: Live Preview Player & Destinations Manager */}
+          <div className="dashboard-grid">
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                {destinations.length === 0 ? (
-                  <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '32px 0' }}>
-                    Belum ada platform destinasi dikonfigurasi. Klik tombol "+ Tambah Platform" di atas.
+            {/* Left Column: Live Monitor Feed (WebRTC Low Latency) */}
+            <div className="grid-left">
+              <div className="card preview-card">
+                <div className="card-header">
+                  <div className="card-title">
+                    <Video size={18} color="var(--accent-color)" />
+                    <span>Live Monitor Feed (WebRTC Low Latency)</span>
                   </div>
-                ) : (
-                  destinations.map((dest) => {
-                    const platformType = getPlatformType(dest);
-                    return (
-                      <div 
-                        key={dest.id} 
-                        className="dest-item" 
-                        data-platform={platformType}
-                        style={{
-                          borderColor: selectedDestId === dest.id ? 'var(--primary)' : 'var(--border)'
-                        }}
-                      >
-                        <div className="dest-header" onClick={() => setSelectedDestId(dest.id)} style={{ cursor: 'pointer' }}>
-                          <div className="dest-name">
-                            <span style={{ 
-                              width: '10px', height: '10px', 
-                              borderRadius: '50%',
-                              backgroundColor: dest.status === 'streaming' ? 'var(--secondary)' : (dest.status === 'error' ? 'var(--danger)' : '#64748b')
-                            }} />
-                            {dest.name}
-                          </div>
+                  <button
+                    className="icon-btn"
+                    onClick={() => setPlayerKey((prev) => prev + 1)}
+                    title="Reload Player Feed"
+                  >
+                    <RotateCw size={14} />
+                    <span>Reload Feed</span>
+                  </button>
+                </div>
 
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            <span className={`status-indicator status-${dest.status}`}>
-                              {dest.status}
-                            </span>
-                            
-                            <button 
-                              className="btn" 
-                              style={{ padding: '6px', background: 'transparent', color: 'var(--text-secondary)' }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (dest.status === 'streaming') {
-                                  handleStopRestream(dest.id);
-                                } else {
-                                  handleDeleteDestination(dest.id);
-                                }
-                              }}
-                              title={dest.status === 'streaming' ? "Hentikan Stream Platform Ini" : "Hapus Platform"}
-                            >
-                              {dest.status === 'streaming' ? <Square size={14} style={{ color: 'var(--danger)' }} /> : <Trash size={14} />}
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="form-group">
-                          <label className="form-label">Nama Platform / Label</label>
-                          <input 
-                            type="text" 
-                            className="input-text" 
-                            value={dest.name} 
-                            onChange={(e) => handleFieldChange(dest.id, 'name', e.target.value)}
-                            placeholder="Contoh: YouTube Live Utama"
-                            disabled={dest.status === 'streaming'}
-                          />
-                        </div>
-
-                        <div className="form-group">
-                          <label className="form-label">RTMP Server URL</label>
-                          <input 
-                            type="text" 
-                            className="input-text" 
-                            value={dest.rtmpUrl} 
-                            onChange={(e) => handleFieldChange(dest.id, 'rtmpUrl', e.target.value)}
-                            placeholder="Contoh: rtmp://a.rtmp.youtube.com/live2"
-                            disabled={dest.status === 'streaming'}
-                          />
-                        </div>
-
-                        <div className="form-group">
-                          <label className="form-label">Stream Key Target</label>
-                          <div style={{ display: 'flex', gap: '8px' }}>
-                            <input 
-                              type="password" 
-                              className="input-text" 
-                              style={{ flex: 1, fontFamily: 'var(--font-mono)' }}
-                              value={dest.streamKey} 
-                              onChange={(e) => handleFieldChange(dest.id, 'streamKey', e.target.value)}
-                              placeholder="Masukkan Stream Key Anda"
-                              disabled={dest.status === 'streaming'}
-                            />
-                            <button 
-                              className="btn btn-secondary"
-                              onClick={() => handleGenerateKey(dest.id)}
-                              disabled={dest.status === 'streaming'}
-                              title="Auto Generate Key Test"
-                              style={{ padding: '0 12px' }}
-                            >
-                              🎲
-                            </button>
-                          </div>
-                        </div>
-
-                        {dest.errorMsg && (
-                          <div style={{ fontSize: '0.75rem', color: 'var(--danger)', padding: '8px 12px', background: 'rgba(244, 63, 94, 0.1)', borderRadius: '6px', border: '1px solid rgba(244, 63, 94, 0.2)' }}>
-                            <strong>Error:</strong> {dest.errorMsg}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })
-                )}
+                <div className="player-wrapper">
+                  <iframe
+                    key={playerKey}
+                    src={`http://localhost:8889/live/${ingestKey}`}
+                    className="webrtc-iframe"
+                    allow="autoplay; fullscreen"
+                    title="Live WebRTC Preview Player"
+                  />
+                  <div className="player-overlay-tag">
+                    <span className="tag-dot"></span>
+                    <span>WHEP WebRTC (&lt;0.5s)</span>
+                  </div>
+                </div>
               </div>
 
-              {destinations.length > 0 && (
-                <button 
-                  className="btn btn-secondary" 
-                  onClick={() => handleSave()}
-                  disabled={actionLoading || isCurrentlyRestreaming}
-                  style={{ width: '100%', marginTop: '8px' }}
-                >
-                  <Save size={16} /> Simpan Semua Konfigurasi Target
-                </button>
-              )}
+              {/* Quick Setup Guide Card */}
+              <div className="card setup-guide-card">
+                <div className="card-header">
+                  <div className="card-title">
+                    <Radio size={18} color="var(--accent-color)" />
+                    <span>Quick Setup OBS Studio</span>
+                  </div>
+                </div>
+
+                <div className="setup-steps">
+                  <div className="step-item">
+                    <span className="step-num">1</span>
+                    <div className="step-content">
+                      <p>Buka OBS Studio &gt; <strong>Settings</strong> &gt; <strong>Stream</strong>.</p>
+                      <p>Pilih Service: <strong>Custom...</strong></p>
+                    </div>
+                  </div>
+
+                  <div className="step-item">
+                    <span className="step-num">2</span>
+                    <div className="step-content">
+                      <p>Salin Server URL berikut ke kolom <strong>Server</strong>:</p>
+                      <div className="copy-field">
+                        <code>rtmp://restream.awgverse.io/live</code>
+                        <button 
+                          className="copy-btn" 
+                          onClick={() => copyToClipboard('rtmp://restream.awgverse.io/live', 'server')}
+                        >
+                          {copiedServer ? <Check size={14} color="#10b981" /> : <Copy size={14} />}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="step-item">
+                    <span className="step-num">3</span>
+                    <div className="step-content">
+                      <p>Salin Stream Key permanen akun Anda ke kolom <strong>Stream Key</strong>:</p>
+                      <div className="copy-field">
+                        <code>{ingestKey}</code>
+                        <button 
+                          className="copy-btn" 
+                          onClick={() => copyToClipboard(ingestKey, 'key')}
+                        >
+                          {copiedKey ? <Check size={14} color="#10b981" /> : <Copy size={14} />}
+                        </button>
+                      </div>
+
+                      <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <button
+                          className="reset-key-btn"
+                          onClick={handleRandomizeIngestKey}
+                          disabled={resetKeyLoading || isCurrentlyRestreaming}
+                        >
+                          {resetKeyLoading ? <RotateCw className="spin" size={13} /> : <RotateCw size={13} />}
+                          <span>Acak Stream Key (1x/24 jam)</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            {/* OBS Quick Setup Guide Card */}
-            <div className="card" style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
-              <h3 style={{ color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.92rem', borderBottom: '1px solid var(--border)', paddingBottom: '10px' }}>
-                <Activity size={14} style={{ color: 'var(--primary)' }} /> Quick Setup OBS Studio
-              </h3>
-              <ol style={{ paddingLeft: '16px', display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
-                <li>OBS Settings &gt; Stream &gt; Service: <strong>Custom...</strong></li>
-                <li>Server: <code style={{ color: 'var(--secondary)', background: 'rgba(255,255,255,0.04)', padding: '2px 6px', borderRadius: '4px', fontWeight: '700' }}>rtmp://restream.awgverse.io/live</code></li>
-                <li>Stream Key: <code style={{ color: 'var(--text-primary)', background: 'rgba(255,255,255,0.04)', padding: '2px 6px', borderRadius: '4px', fontWeight: '700' }}>{ingestKey}</code></li>
-                <li>Output &gt; Streaming &gt; Keyframe Interval: <strong>2s</strong></li>
-                <li>Output &gt; Streaming &gt; Max B-frames: <strong>0</strong> (Wajib WebRTC).</li>
-              </ol>
+            {/* Right Column: Platform Destinations Configurator */}
+            <div className="grid-right">
+              <div className="card destinations-card">
+                <div className="card-header">
+                  <div className="card-title">
+                    <Tv size={18} color="var(--accent-color)" />
+                    <span>Target Platform (Maksimal {userPlan === 'ultimate' ? 8 : userPlan === 'pro' ? 4 : 2})</span>
+                  </div>
+                  <button
+                    className="add-dest-btn"
+                    onClick={handleAddDestination}
+                  >
+                    <Plus size={14} />
+                    <span>Tambah Platform</span>
+                  </button>
+                </div>
+
+                <div className="destinations-list">
+                  {destinations.map((dest, idx) => (
+                    <div className="destination-item" key={dest.id}>
+                      <div className="dest-header">
+                        <div className="dest-title">
+                          <span className={`dest-status-dot ${dest.status}`}></span>
+                          <span className="dest-name font-bold">{dest.name}</span>
+                        </div>
+                        <div className="dest-actions">
+                          <span className="dest-status-tag">{dest.status.toUpperCase()}</span>
+                          <button
+                            className="delete-btn"
+                            onClick={() => handleRemoveDestination(dest.id)}
+                            title="Hapus Platform"
+                          >
+                            <Trash size={14} />
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="form-group">
+                        <label>NAMA PLATFORM / LABEL</label>
+                        <input
+                          type="text"
+                          value={dest.name}
+                          onChange={(e) => {
+                            const newDestArr = [...destinations];
+                            newDestArr[idx].name = e.target.value;
+                            setDestinations(newDestArr);
+                          }}
+                          placeholder="misal YouTube Utama / Twitch TV"
+                        />
+                      </div>
+
+                      <div className="form-group">
+                        <label>RTMP SERVER URL</label>
+                        <input
+                          type="text"
+                          value={dest.rtmpUrl}
+                          onChange={(e) => {
+                            const newDestArr = [...destinations];
+                            newDestArr[idx].rtmpUrl = e.target.value;
+                            setDestinations(newDestArr);
+                          }}
+                          placeholder="rtmp://a.rtmp.youtube.com/live2"
+                        />
+                      </div>
+
+                      <div className="form-group">
+                        <label>STREAM KEY TARGET</label>
+                        <input
+                          type="password"
+                          value={dest.streamKey}
+                          onChange={(e) => {
+                            const newDestArr = [...destinations];
+                            newDestArr[idx].streamKey = e.target.value;
+                            setDestinations(newDestArr);
+                          }}
+                          placeholder="Masukkan Stream Key Anda"
+                        />
+                      </div>
+                    </div>
+                  ))}
+
+                  <button className="save-all-btn">
+                    <Save size={16} />
+                    <span>Simpan Semua Konfigurasi Target</span>
+                  </button>
+                </div>
+              </div>
             </div>
 
           </div>
         </main>
       </div>
 
-      {/* FAQ Modal Component (Vertical downward stacking layout) */}
-      {isFaqOpen && (
-        <div className="faq-modal-overlay" onClick={() => setIsFaqOpen(false)}>
-          <div className="faq-modal-card" onClick={(e) => e.stopPropagation()}>
-            <div className="faq-modal-header">
-              <h2 className="faq-title">
-                <HelpCircle size={22} style={{ color: 'var(--primary)' }} />
-                FAQ & Support Guide
-              </h2>
-              <button 
-                className="btn btn-secondary" 
-                style={{ padding: '6px 12px', fontSize: '0.82rem' }}
-                onClick={() => setIsFaqOpen(false)}
-              >
-                <X size={16} /> Tutup FAQ
+      {/* Plan Switcher & Pricing Modal */}
+      {isPlanModalOpen && (
+        <div className="modal-backdrop">
+          <div className="plan-modal-card">
+            <div className="modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Crown size={22} color="#eab308" />
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>Pilih Tier Membership MyStream Studio</h3>
+              </div>
+              <button className="close-modal-btn" onClick={() => setIsPlanModalOpen(false)}>
+                <X size={18} />
               </button>
             </div>
 
-            <div className="faq-modal-body">
-              <div className="faq-grid">
-                {faqData.map((faq, index) => (
-                  <div 
-                    key={index} 
-                    className={`faq-item ${openFaqIndex === index ? 'open' : ''}`}
-                  >
-                    <div className="faq-header" onClick={() => toggleFaq(index)}>
-                      <span>{faq.q}</span>
-                      <span className="faq-chevron" style={{ fontSize: '0.75rem' }}>▼</span>
-                    </div>
-                    <div className="faq-content">
-                      <p>{faq.a}</p>
-                    </div>
-                  </div>
-                ))}
+            <div className="plan-grid">
+              {/* Free Plan Card */}
+              <div className={`plan-card ${userPlan === 'free' ? 'active-plan' : ''}`}>
+                <div className="plan-header">
+                  <Zap size={24} color="#94a3b8" />
+                  <h4>FREE PLAN</h4>
+                  <span className="price">Rp 0 <small>/ bulan</small></span>
+                </div>
+                <ul className="plan-features">
+                  <li>✅ Maksimal 2 Target Platform</li>
+                  <li>✅ Batas Resolusi 720p HD</li>
+                  <li>⏱️ Max 4 Jam per Sesi Live</li>
+                  <li>📢 Ad-Supported (100% Iklan & Watermark)</li>
+                </ul>
+                <button 
+                  className={`select-plan-btn ${userPlan === 'free' ? 'current' : ''}`}
+                  onClick={() => handleSwitchPlan('free')}
+                  disabled={userPlan === 'free'}
+                >
+                  {userPlan === 'free' ? 'Plan Saat Ini' : 'Pilih Free Plan'}
+                </button>
+              </div>
+
+              {/* Pro Member Card */}
+              <div className={`plan-card pro ${userPlan === 'pro' ? 'active-plan' : ''}`}>
+                <div className="popular-badge">RECOMMENDED</div>
+                <div className="plan-header">
+                  <Sparkles size={24} color="#6366f1" />
+                  <h4>PRO MEMBER</h4>
+                  <span className="price">Rp 49.000 <small>/ bulan</small></span>
+                </div>
+                <ul className="plan-features">
+                  <li>✅ Maksimal 4 Target Platform</li>
+                  <li>✅ Batas Resolusi 1080p Full HD</li>
+                  <li>♾️ Unlimited Live Stream 24/7</li>
+                  <li>✨ Minimal Ads (25% Minimal Iklan)</li>
+                </ul>
+                <button 
+                  className={`select-plan-btn pro ${userPlan === 'pro' ? 'current' : ''}`}
+                  onClick={() => handleSwitchPlan('pro')}
+                  disabled={userPlan === 'pro'}
+                >
+                  {userPlan === 'pro' ? 'Plan Saat Ini' : 'Aktifkan Pro Member'}
+                </button>
+              </div>
+
+              {/* Ultimate VIP Card */}
+              <div className={`plan-card ultimate ${userPlan === 'ultimate' ? 'active-plan' : ''}`}>
+                <div className="plan-header">
+                  <Crown size={24} color="#eab308" />
+                  <h4>ULTIMATE VIP</h4>
+                  <span className="price">Rp 99.000 <small>/ bulan</small></span>
+                </div>
+                <ul className="plan-features">
+                  <li>✅ Maksimal 8 Target Platform</li>
+                  <li>✅ Super Ultra HD 4K60 (3840x2160)</li>
+                  <li>♾️ Unlimited Live Stream 24/7</li>
+                  <li>👑 100% Ad-Free & Watermark-Free</li>
+                </ul>
+                <button 
+                  className={`select-plan-btn ultimate ${userPlan === 'ultimate' ? 'current' : ''}`}
+                  onClick={() => handleSwitchPlan('ultimate')}
+                  disabled={userPlan === 'ultimate'}
+                >
+                  {userPlan === 'ultimate' ? 'Plan Saat Ini' : 'Aktifkan Ultimate VIP'}
+                </button>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Compact Clean Footer */}
-      <footer className="app-footer">
-        <div className="footer-inner" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <button className="btn btn-secondary" onClick={() => setIsFaqOpen(true)}>
-              <HelpCircle size={16} /> Buka FAQ & Guide
-            </button>
-            <a 
-              href="https://github.com/studentawangihti/mystream" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="btn btn-secondary"
-              style={{ textDecoration: 'none' }}
-            >
-              <ExternalLink size={16} /> GitHub Repository
-            </a>
-          </div>
+      {/* FAQ Locker Modal */}
+      {isFaqOpen && (
+        <div className="modal-backdrop">
+          <div className="faq-modal-card">
+            <div className="modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <HelpCircle size={20} color="var(--accent-color)" />
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>Pertanyaan Sering Diajukan (FAQ)</h3>
+              </div>
+              <button className="close-modal-btn" onClick={() => setIsFaqOpen(false)}>
+                <X size={18} />
+              </button>
+            </div>
 
-          <div className="footer-copy">
-            <p>Copyright by <strong>awgxidn</strong> &copy; {new Date().getFullYear()}. All Rights Reserved.</p>
+            <div className="faq-accordion-container">
+              {faqData.map((faq, idx) => (
+                <div className="faq-accordion-item" key={idx}>
+                  <button
+                    className={`faq-question-btn ${openFaqIndex === idx ? 'expanded' : ''}`}
+                    onClick={() => setOpenFaqIndex(openFaqIndex === idx ? null : idx)}
+                  >
+                    <span>{faq.q}</span>
+                    <ChevronDown size={16} className={`chevron-icon ${openFaqIndex === idx ? 'rotate' : ''}`} />
+                  </button>
+                  {openFaqIndex === idx && (
+                    <div className="faq-answer-content">
+                      <p style={{ whiteSpace: 'pre-line' }}>{faq.a}</p>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
+        </div>
+      )}
+
+      {/* Footer Section */}
+      <footer className="studio-footer">
+        <div className="footer-left">
+          <span>Copyright by <strong>awgxidn © 2026</strong>. All Rights Reserved.</span>
+        </div>
+        <div className="footer-right">
+          <a
+            href="https://github.com/studentawangihti/mystream"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="github-footer-link"
+          >
+            <Terminal size={14} />
+            <span>GitHub Repository: studentawangihti/mystream</span>
+            <ExternalLink size={12} />
+          </a>
         </div>
       </footer>
     </div>

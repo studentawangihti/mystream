@@ -37,6 +37,7 @@ export const authOptions: NextAuthOptions = {
           id: user.id,
           name: user.name,
           email: user.email,
+          plan: user.plan || 'free',
           ingestKey: user.ingestKey,
           lastResetAt: user.lastResetAt ? user.lastResetAt.toISOString() : null,
         };
@@ -50,18 +51,21 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, user, trigger, session }) {
       if (user) {
         token.id = user.id;
+        token.plan = (user as any).plan || 'free';
         token.ingestKey = (user as any).ingestKey;
         token.lastResetAt = (user as any).lastResetAt;
       }
-      if (trigger === 'update' && session?.ingestKey) {
-        token.ingestKey = session.ingestKey;
-        token.lastResetAt = session.lastResetAt;
+      if (trigger === 'update' && session) {
+        if (session.plan) token.plan = session.plan;
+        if (session.ingestKey) token.ingestKey = session.ingestKey;
+        if (session.lastResetAt) token.lastResetAt = session.lastResetAt;
       }
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
         (session.user as any).id = token.id as string;
+        (session.user as any).plan = (token.plan as string) || 'free';
         (session.user as any).ingestKey = token.ingestKey as string;
         (session.user as any).lastResetAt = token.lastResetAt as string | null;
       }

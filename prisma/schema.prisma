@@ -12,6 +12,7 @@ model User {
   name         String?
   email        String        @unique
   password     String
+  plan         String        @default("free") // "free", "pro", "ultimate"
   ingestKey    String        @unique @default(uuid())
   lastResetAt  DateTime?
   createdAt    DateTime      @default(now())

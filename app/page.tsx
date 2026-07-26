@@ -23,7 +23,8 @@ import {
   Check,
   Compass,
   Layers,
-  FileText
+  FileText,
+  X
 } from 'lucide-react';
 
 interface Destination {
@@ -74,6 +75,7 @@ export default function Dashboard() {
   const [ingestKey, setIngestKey] = useState<string>('test');
   const [playerKey, setPlayerKey] = useState<number>(0);
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
+  const [isFaqOpen, setIsFaqOpen] = useState<boolean>(false);
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('system');
   const [copiedServer, setCopiedServer] = useState<boolean>(false);
   const [copiedKey, setCopiedKey] = useState<boolean>(false);
@@ -486,10 +488,10 @@ export default function Dashboard() {
             </li>
             <li>
               <a 
-                className={`sidebar-nav-item ${activeNav === 'faq' ? 'active' : ''}`}
-                onClick={() => scrollToSection('sec-faq')}
+                className="sidebar-nav-item"
+                onClick={() => setIsFaqOpen(true)}
               >
-                <HelpCircle size={18} /> FAQ & Guide
+                <HelpCircle size={18} /> Buka Loker FAQ
               </a>
             </li>
           </ul>
@@ -850,33 +852,66 @@ export default function Dashboard() {
         </main>
       </div>
 
-      {/* 2-Column FAQ Footer Grid */}
-      <footer id="sec-faq" className="app-footer">
-        <div className="footer-inner">
-          <h2 className="faq-title">
-            <HelpCircle size={22} style={{ color: 'var(--primary)' }} />
-            Frequently Asked Questions (FAQ)
-          </h2>
-          
-          <div className="faq-grid">
-            {faqData.map((faq, index) => (
-              <div 
-                key={index} 
-                className={`faq-item ${openFaqIndex === index ? 'open' : ''}`}
+      {/* Loker FAQ Modal Component */}
+      {isFaqOpen && (
+        <div className="faq-modal-overlay" onClick={() => setIsFaqOpen(false)}>
+          <div className="faq-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="faq-modal-header">
+              <h2 className="faq-title">
+                <HelpCircle size={22} style={{ color: 'var(--primary)' }} />
+                Loker FAQ & Support Guide
+              </h2>
+              <button 
+                className="btn btn-secondary" 
+                style={{ padding: '6px 12px', fontSize: '0.82rem' }}
+                onClick={() => setIsFaqOpen(false)}
               >
-                <div className="faq-header" onClick={() => toggleFaq(index)}>
-                  <span>{faq.q}</span>
-                  <span className="faq-chevron" style={{ fontSize: '0.75rem' }}>▼</span>
-                </div>
-                <div className="faq-content">
-                  <p>{faq.a}</p>
-                </div>
+                <X size={16} /> Tutup Loker
+              </button>
+            </div>
+
+            <div className="faq-modal-body">
+              <div className="faq-grid">
+                {faqData.map((faq, index) => (
+                  <div 
+                    key={index} 
+                    className={`faq-item ${openFaqIndex === index ? 'open' : ''}`}
+                  >
+                    <div className="faq-header" onClick={() => toggleFaq(index)}>
+                      <span>{faq.q}</span>
+                      <span className="faq-chevron" style={{ fontSize: '0.75rem' }}>▼</span>
+                    </div>
+                    <div className="faq-content">
+                      <p>{faq.a}</p>
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Compact Clean Footer */}
+      <footer className="app-footer">
+        <div className="footer-inner" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <button className="btn btn-secondary" onClick={() => setIsFaqOpen(true)}>
+              <HelpCircle size={16} /> Buka Loker FAQ & Guide
+            </button>
+            <a 
+              href="https://github.com/studentawangihti/mystream" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="btn btn-secondary"
+              style={{ textDecoration: 'none' }}
+            >
+              <ExternalLink size={16} /> GitHub Repository
+            </a>
           </div>
 
           <div className="footer-copy">
-            <p>&copy; {new Date().getFullYear()} MyStream Studio. Broadcast Command Center powered by Next.js, MediaMTX, and FFmpeg.</p>
+            <p>Copyright by <strong>awgxidn</strong> &copy; {new Date().getFullYear()}. All Rights Reserved.</p>
           </div>
         </div>
       </footer>

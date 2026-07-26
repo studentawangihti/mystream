@@ -8,16 +8,19 @@ datasource db {
 }
 
 model User {
-  id           String        @id @default(uuid())
-  name         String?
-  email        String        @unique
-  password     String
-  plan         String        @default("free") // "free", "pro", "ultimate"
-  ingestKey    String        @unique @default(uuid())
-  lastResetAt  DateTime?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  destinations Destination[]
+  id               String        @id @default(uuid())
+  name             String?
+  email            String        @unique
+  password         String
+  role             String        @default("user") // "user", "admin"
+  plan             String        @default("free") // "free", "pro", "ultimate"
+  ingestKey        String        @unique @default(uuid())
+  lastResetAt      DateTime?
+  resetToken       String?
+  resetTokenExpiry DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  destinations     Destination[]
 }
 
 model Destination {

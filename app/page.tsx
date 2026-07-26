@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useSession, signOut } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { 
   Tv, 
   Plus, 
@@ -37,7 +38,10 @@ import {
   Gauge,
   Crown,
   Sparkles,
-  Zap
+  Zap,
+  ShieldCheck,
+  KeyRound,
+  CheckCircle
 } from 'lucide-react';
 
 interface Telemetry {
@@ -108,6 +112,14 @@ export default function Dashboard() {
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('system');
   const [copiedServer, setCopiedServer] = useState<boolean>(false);
   const [copiedKey, setCopiedKey] = useState<boolean>(false);
+
+  // Change password modal states
+  const [isChangePassOpen, setIsChangePassOpen] = useState<boolean>(false);
+  const [currentPassword, setCurrentPassword] = useState<string>('');
+  const [newPassword, setNewPassword] = useState<string>('');
+  const [passLoading, setPassLoading] = useState<boolean>(false);
+  const [passError, setPassError] = useState<string>('');
+  const [passSuccess, setPassSuccess] = useState<string>('');
   
   // Live Telemetry state
   const [telemetry, setTelemetry] = useState<Telemetry>({
@@ -283,6 +295,40 @@ export default function Dashboard() {
     }
   };
 
+  // Handle Change Password Submit
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPassError('');
+    setPassSuccess('');
+    setPassLoading(true);
+
+    try {
+      const res = await fetch('/api/user/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setPassError(data.error || 'Gagal memperbarui password.');
+      } else {
+        setPassSuccess(data.message);
+        setCurrentPassword('');
+        setNewPassword('');
+        setTimeout(() => {
+          setIsChangePassOpen(false);
+          setPassSuccess('');
+        }, 2000);
+      }
+    } catch (err) {
+      setPassError('Terjadi kesalahan koneksi.');
+    } finally {
+      setPassLoading(false);
+    }
+  };
+
   // Add Target Platform
   const handleAddDestination = () => {
     const currentPlan = (session?.user as any)?.plan || 'free';
@@ -371,6 +417,7 @@ export default function Dashboard() {
   }
 
   const userPlan = (session?.user as any)?.plan || 'free';
+  const userRole = (session?.user as any)?.role || 'user';
   const isCurrentlyRestreaming = telemetry.status === 'broadcasting';
 
   return (
@@ -386,6 +433,18 @@ export default function Dashboard() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          {/* Super Admin Control Panel Button */}
+          {userRole === 'admin' && (
+            <Link 
+              href="/admin" 
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 14px', borderRadius: '20px', background: 'linear-gradient(135deg, rgba(234,179,8,0.2) 0%, rgba(245,158,11,0.3) 100%)', color: '#fbbf24', border: '1px solid rgba(234,179,8,0.5)', textDecoration: 'none', fontSize: '0.78rem', fontWeight: 800 }}
+              title="Buka Control Center Super Admin"
+            >
+              <ShieldCheck size={14} />
+              <span>⚙️ ADMIN PANEL</span>
+            </Link>
+          )}
+
           {/* Hardware CPU Chip */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border)', padding: '6px 14px', borderRadius: '10px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
             <Cpu size={14} color="#10b981" />
@@ -410,12 +469,23 @@ export default function Dashboard() {
 
           {/* User Profile */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', paddingLeft: '12px', borderLeft: '1px solid var(--border)' }}>
-            <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.85rem', color: '#fff' }}>
+            <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: userRole === 'admin' ? '#eab308' : 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.85rem', color: '#fff' }}>
               {session?.user?.name ? session.user.name[0].toUpperCase() : 'U'}
             </div>
             <span style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-primary)' }}>
               {session?.user?.name || 'Studio User'}
             </span>
+
+            {/* Ganti Password Button */}
+            <button 
+              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)', color: 'var(--text-secondary)', padding: '6px 10px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem' }}
+              onClick={() => setIsChangePassOpen(true)}
+              title="Ubah Password Akun"
+            >
+              <KeyRound size={13} />
+              <span>Password</span>
+            </button>
+
             <button 
               style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)', color: 'var(--text-secondary)', padding: '6px 10px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem' }}
               onClick={() => signOut({ callbackUrl: '/login' })}
@@ -502,6 +572,14 @@ export default function Dashboard() {
                 <span className="sidebar-nav-text">Platform Target</span>
               </a>
             </li>
+            {userRole === 'admin' && (
+              <li>
+                <Link href="/admin" className="sidebar-nav-item" style={{ color: '#fbbf24' }}>
+                  <ShieldCheck size={18} />
+                  <span className="sidebar-nav-text">Admin Panel</span>
+                </Link>
+              </li>
+            )}
             <li>
               <a 
                 className="sidebar-nav-item"
@@ -861,6 +939,71 @@ export default function Dashboard() {
 
         </main>
       </div>
+
+      {/* Change Password Modal */}
+      {isChangePassOpen && (
+        <div className="modal-backdrop">
+          <div className="plan-modal-card" style={{ maxWidth: '440px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '16px', borderBottom: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <KeyRound size={20} color="var(--primary)" />
+                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>Ubah Password Akun</h3>
+              </div>
+              <button style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }} onClick={() => setIsChangePassOpen(false)}>
+                <X size={18} />
+              </button>
+            </div>
+
+            {passError && (
+              <div style={{ background: 'rgba(244,63,94,0.15)', border: '1px solid rgba(244,63,94,0.3)', color: '#fb7185', padding: '12px 16px', borderRadius: '10px', fontSize: '0.85rem', marginTop: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <AlertTriangle size={16} />
+                <span>{passError}</span>
+              </div>
+            )}
+
+            {passSuccess ? (
+              <div style={{ background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.3)', color: '#34d399', padding: '12px 16px', borderRadius: '10px', fontSize: '0.85rem', marginTop: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <CheckCircle size={16} />
+                <span>{passSuccess}</span>
+              </div>
+            ) : (
+              <form onSubmit={handleChangePassword} style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '20px' }}>
+                <div className="form-group">
+                  <label className="form-label">PASSWORD SAAT INI</label>
+                  <input
+                    type="password"
+                    required
+                    className="input-text"
+                    placeholder="••••••••"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">PASSWORD BARU</label>
+                  <input
+                    type="password"
+                    required
+                    className="input-text"
+                    placeholder="Minimal 6 karakter"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={passLoading}
+                  style={{ width: '100%', padding: '12px', borderRadius: '10px', border: 'none', background: 'var(--primary)', color: '#fff', fontWeight: 700, fontSize: '0.88rem', cursor: 'pointer', marginTop: '6px' }}
+                >
+                  {passLoading ? 'Memperbarui...' : 'Simpan Password Baru'}
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Plan Switcher & Pricing Modal */}
       {isPlanModalOpen && (

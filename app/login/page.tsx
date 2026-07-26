@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { signIn } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Radio, LogIn, Lock, Mail, AlertCircle, RotateCw } from 'lucide-react';
+import { Radio, LogIn, Lock, Mail, AlertCircle, RotateCw, KeyRound, X, CheckCircle, ExternalLink } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -12,6 +12,14 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Forgot password modal state
+  const [isForgotModalOpen, setIsForgotModalOpen] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotSuccessMsg, setForgotSuccessMsg] = useState('');
+  const [forgotResetUrl, setForgotResetUrl] = useState('');
+  const [forgotErrorMsg, setForgotErrorMsg] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,6 +43,37 @@ export default function LoginPage() {
     } catch (err: any) {
       setError('Terjadi kesalahan sistem. Silakan coba lagi.');
       setLoading(false);
+    }
+  };
+
+  const handleForgotSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setForgotErrorMsg('');
+    setForgotSuccessMsg('');
+    setForgotResetUrl('');
+    setForgotLoading(true);
+
+    try {
+      const res = await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: forgotEmail }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setForgotErrorMsg(data.error || 'Gagal memproses lupa password.');
+      } else {
+        setForgotSuccessMsg(data.message);
+        if (data.resetUrl) {
+          setForgotResetUrl(data.resetUrl);
+        }
+      }
+    } catch (err) {
+      setForgotErrorMsg('Terjadi kesalahan koneksi.');
+    } finally {
+      setForgotLoading(false);
     }
   };
 
@@ -100,7 +139,19 @@ export default function LoginPage() {
           </div>
 
           <div className="form-group">
-            <label className="form-label">Password</label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <label className="form-label">Password</label>
+              <button
+                type="button"
+                style={{ background: 'transparent', border: 'none', color: 'var(--primary)', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer' }}
+                onClick={() => {
+                  setForgotEmail(email);
+                  setIsForgotModalOpen(true);
+                }}
+              >
+                Lupa Password?
+              </button>
+            </div>
             <div style={{ position: 'relative' }}>
               <Lock size={16} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
               <input
@@ -117,13 +168,12 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            className="btn btn-primary"
+            style={{ width: '100%', padding: '14px', marginTop: '8px', fontSize: '0.95rem', borderRadius: '10px', border: 'none', background: 'var(--primary)', color: '#fff', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
             disabled={loading}
-            style={{ width: '100%', padding: '14px', marginTop: '8px', fontSize: '0.95rem' }}
           >
             {loading ? (
               <>
-                <RotateCw className="animate-spin" size={16} style={{ animation: 'spin 1.5s linear infinite' }} /> Memproses...
+                <RotateCw className="spin" size={16} /> Memproses...
               </>
             ) : (
               <>
@@ -140,12 +190,78 @@ export default function LoginPage() {
           </Link>
         </div>
       </div>
-      <style dangerouslySetInnerHTML={{__html: `
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-      `}} />
+
+      {/* Forgot Password Modal */}
+      {isForgotModalOpen && (
+        <div className="modal-backdrop">
+          <div className="plan-modal-card" style={{ maxWidth: '440px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '16px', borderBottom: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <KeyRound size={20} color="var(--primary)" />
+                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>Reset Password Akun</h3>
+              </div>
+              <button style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }} onClick={() => setIsForgotModalOpen(false)}>
+                <X size={18} />
+              </button>
+            </div>
+
+            {forgotErrorMsg && (
+              <div style={{ background: 'rgba(244,63,94,0.15)', border: '1px solid rgba(244,63,94,0.3)', color: '#fb7185', padding: '12px 16px', borderRadius: '10px', fontSize: '0.85rem', marginTop: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <AlertCircle size={16} />
+                <span>{forgotErrorMsg}</span>
+              </div>
+            )}
+
+            {forgotSuccessMsg ? (
+              <div style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div style={{ background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.3)', color: '#34d399', padding: '12px 16px', borderRadius: '10px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <CheckCircle size={16} />
+                  <span>{forgotSuccessMsg}</span>
+                </div>
+
+                {forgotResetUrl && (
+                  <div style={{ background: 'var(--bg-input)', border: '1px dashed var(--primary)', padding: '14px', borderRadius: '10px', fontSize: '0.82rem', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>1-Click Reset Link (Mode Lokal):</span>
+                    <a href={forgotResetUrl} style={{ color: 'var(--primary)', textDecoration: 'underline', wordBreak: 'break-all', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                      <span>Buka Halaman Reset Password</span>
+                      <ExternalLink size={12} />
+                    </a>
+                  </div>
+                )}
+
+                <button
+                  style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-primary)', fontWeight: 600, cursor: 'pointer', marginTop: '10px' }}
+                  onClick={() => setIsForgotModalOpen(false)}
+                >
+                  Tutup Modal
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleForgotSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '20px' }}>
+                <div className="form-group">
+                  <label className="form-label">MASUKKAN EMAIL AKUN ANDA</label>
+                  <input
+                    type="email"
+                    required
+                    className="input-text"
+                    placeholder="nama@email.com"
+                    value={forgotEmail}
+                    onChange={(e) => setForgotEmail(e.target.value)}
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={forgotLoading}
+                  style={{ width: '100%', padding: '12px', borderRadius: '10px', border: 'none', background: 'var(--primary)', color: '#fff', fontWeight: 700, fontSize: '0.88rem', cursor: 'pointer' }}
+                >
+                  {forgotLoading ? 'Menerbitkan Link...' : 'Kirim Link Reset Password'}
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

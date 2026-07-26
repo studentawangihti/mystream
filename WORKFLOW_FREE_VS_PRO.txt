@@ -89,10 +89,6 @@ LANGKAH 4: ANTARMUKA DASHBOARD WEB (app/page.tsx)
 
 
 tambahan dari aku :
-jika user free bisa restream 720p untuk 2 platform
-jika user pro bisa restream 1080p untuk upto 4 platform
-jika user ultimate bisa restream 4k untuk upto 8 platform
-
-serta untuk user free ada 100% iklan serta untuk user pro ada 25% iklan untuk user ultimate tanpa iklan
-serta untuk planning pro dan ultimate bisa restream tanpa batas waktu
-dibuat lebih balance
+1. jika user free bisa restream 720p untuk 2 platform, jika user pro bisa restream 1080p untuk upto 4 platform, jika user ultimate bisa restream 4k untuk upto 8 platform
+2. serta untuk user free ada 100% iklan serta untuk user pro ada 25% iklan untuk user ultimate tanpa iklan, untuk planning pro dan ultimate bisa restream tanpa batas waktu
+3. perbandingan plan dibuat lebih balance tapi tetap menarik untuk upgrade ke pro

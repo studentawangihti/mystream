@@ -74,9 +74,9 @@ export async function POST(req: Request) {
     }
 
     // 2. Enforce File Size Limits per Plan
-    // Free: 75MB (78,643,200 bytes)
-    // Pro: 1GB (1,073,741,824 bytes)
-    // Ultimate: 3GB (3,221,225,472 bytes)
+    // Free: 75MB per file
+    // Pro: 1GB per file
+    // Ultimate: 3GB per file
     const fileSize = file.size;
     let maxSize = 78643200; // 75MB for Free
     let maxMBLabel = '75 MB';
@@ -92,7 +92,39 @@ export async function POST(req: Request) {
     if (fileSize > maxSize) {
       return NextResponse.json(
         { 
-          error: `Ukuran file (${(fileSize / (1024 * 1024)).toFixed(1)} MB) melebihi batas plan ${userPlan.toUpperCase()} (Maksimal ${maxMBLabel}). Silakan upgrade plan Anda!` 
+          error: `Ukuran file (${(fileSize / (1024 * 1024)).toFixed(1)} MB) melebihi batas per-file plan ${userPlan.toUpperCase()} (Maksimal ${maxMBLabel}). Silakan upgrade plan Anda!` 
+        },
+        { status: 400 }
+      );
+    }
+
+    // 3. Enforce Cumulative Cloud Storage Quotas per Plan
+    // Free: 200 MB Total Storage (209,715,200 bytes)
+    // Pro: 5 GB Total Storage (5,368,709,120 bytes)
+    // Ultimate: 25 GB Total Storage (26,843,545,600 bytes)
+    const existingVideos = await prisma.video.findMany({
+      where: { userId },
+      select: { sizeBytes: true },
+    });
+
+    const currentUsedBytes = existingVideos.reduce((acc, curr) => acc + BigInt(curr.sizeBytes), BigInt(0));
+
+    let maxTotalStorage = BigInt(209715200); // 200 MB for Free
+    let maxStorageLabel = '200 MB';
+
+    if (userPlan === 'pro') {
+      maxTotalStorage = BigInt(5368709120); // 5 GB for Pro
+      maxStorageLabel = '5 GB';
+    } else if (userPlan === 'ultimate') {
+      maxTotalStorage = BigInt(26843545600); // 25 GB for Ultimate
+      maxStorageLabel = '25 GB';
+    }
+
+    if (currentUsedBytes + BigInt(fileSize) > maxTotalStorage) {
+      const usedMB = (Number(currentUsedBytes) / (1024 * 1024)).toFixed(1);
+      return NextResponse.json(
+        {
+          error: `Kapasitas Cloud Storage Anda melebihi kuota plan ${userPlan.toUpperCase()} (Terpakai ${usedMB} MB dari total ${maxStorageLabel}). Silakan hapus beberapa video lama atau upgrade plan Anda!`,
         },
         { status: 400 }
       );
@@ -120,7 +152,7 @@ export async function POST(req: Request) {
 
     await fs.promises.writeFile(destinationPath, buffer);
 
-    // 3. Verify Video Container with FFprobe
+    // 4. Verify Video Container with FFprobe
     const { duration: durationSecs, formatName } = await getVideoInfo(destinationPath);
 
     if (!formatName.includes('mp4') && !formatName.includes('mov') && !formatName.includes('3gp') && !formatName.includes('isom')) {
@@ -133,7 +165,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // 4. Enforce Video Duration Limits per Plan
+    // 5. Enforce Video Duration Limits per Plan
     // Free: 20 Min (1,200s)
     // Pro: 60 Min (3,600s)
     // Ultimate: 300 Min / 5h (18,000s)

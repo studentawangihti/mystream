@@ -13,17 +13,47 @@ export async function GET(req: Request) {
     }
 
     const userId = (session.user as any).id;
+
+    // Refresh user plan from DB
+    const dbUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { plan: true },
+    });
+
+    const userPlan = dbUser?.plan || 'free';
+
     const videos = await prisma.video.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
     });
+
+    const usedStorageBytes = videos.reduce((acc, v) => acc + BigInt(v.sizeBytes), BigInt(0));
+
+    let maxStorageBytes = BigInt(209715200); // 200 MB for Free
+    let maxStorageLabel = '200 MB';
+
+    if (userPlan === 'pro') {
+      maxStorageBytes = BigInt(5368709120); // 5 GB for Pro
+      maxStorageLabel = '5 GB';
+    } else if (userPlan === 'ultimate') {
+      maxStorageBytes = BigInt(26843545600); // 25 GB for Ultimate
+      maxStorageLabel = '25 GB';
+    }
 
     const formattedVideos = videos.map((v) => ({
       ...v,
       sizeBytes: v.sizeBytes.toString(),
     }));
 
-    return NextResponse.json({ videos: formattedVideos });
+    return NextResponse.json({
+      videos: formattedVideos,
+      storage: {
+        usedBytes: usedStorageBytes.toString(),
+        maxBytes: maxStorageBytes.toString(),
+        maxLabel: maxStorageLabel,
+        plan: userPlan,
+      },
+    });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

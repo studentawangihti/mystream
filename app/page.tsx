@@ -46,7 +46,8 @@ import {
   FileVideo,
   Film,
   HardDrive,
-  PlayCircle
+  PlayCircle,
+  Eye
 } from 'lucide-react';
 
 interface Telemetry {
@@ -83,6 +84,13 @@ interface VideoRecord {
   createdAt: string;
 }
 
+interface CloudStorageMetrics {
+  usedBytes: string;
+  maxBytes: string;
+  maxLabel: string;
+  plan: string;
+}
+
 interface FAQItem {
   q: string;
   a: string;
@@ -90,12 +98,12 @@ interface FAQItem {
 
 const faqData: FAQItem[] = [
   {
-    q: "Bagaimana cara kerja Cloud Restreaming Tanpa OBS?",
-    a: "Anda cukup mengunggah file video berkategori MP4 ke Cloud Video Library akun Anda. Setelah itu, tekan tombol 'Mulai Cloud Restream (Tanpa OBS)'. Server MyStream akan menyiarkan video tersebut secara kontinyu (infinite loop 24/7) ke seluruh platform tujuan Anda tanpa perlu menggunakan OBS Studio atau menyalakan PC Anda!"
+    q: "Berapa kapasitas akumulasi penyimpanan Cloud Storage per plan?",
+    a: "Kapasitas total penyimpanan video MP4 diatur berdasarkan plan keanggotaan Anda:\n• Free Plan: Maksimal 200 MB total penyimpanan kumulatif (per-file max 75 MB / 20 menit).\n• Pro Member: Maksimal 5 GB total penyimpanan kumulatif (per-file max 1 GB / 1 jam).\n• Ultimate VIP: Maksimal 25 GB total penyimpanan kumulatif (per-file max 3 GB / 5 jam)."
   },
   {
-    q: "Berapa batasan ukuran MB dan durasi menit video yang diunggah?",
-    a: "Batasan diatur berdasarkan plan keanggotaan Anda:\n• Free Plan: Maksimal 75 MB atau 20 Menit durasi video MP4.\n• Pro Member: Maksimal 1 GB (1.024 MB) atau 60 Menit (1 Jam) durasi video MP4.\n• Ultimate VIP: Maksimal 3 GB (3.072 MB) atau 300 Menit (5 Jam) durasi video MP4."
+    q: "Bagaimana cara kerja Cloud Restreaming Tanpa OBS?",
+    a: "Anda cukup mengunggah file video berkategori MP4 ke Cloud Video Library akun Anda. Setelah itu, tekan tombol 'Mulai Cloud Restream (Tanpa OBS)'. Server MyStream akan menyiarkan video tersebut secara kontinyu (infinite loop 24/7) ke seluruh platform tujuan Anda tanpa perlu menggunakan OBS Studio atau menyalakan PC Anda!"
   },
   {
     q: "Format file apa saja yang diizinkan untuk diunggah?",
@@ -104,10 +112,6 @@ const faqData: FAQItem[] = [
   {
     q: "Apa perbedaan antara Free Plan, Pro Member, dan Ultimate VIP?",
     a: "Free Plan mendukung hingga 2 platform target pada resolusi 720p HD dengan iklan & watermark. Pro Member (Rp 49rb/bln) mendukung hingga 4 platform target pada resolusi 1080p Full HD dengan 25% minimal iklan. Ultimate VIP (Rp 99rb/bln) mendukung hingga 8 platform target pada resolusi 4K Ultra HD 100% ad-free & watermark-free serta siaran 24/7 non-stop!"
-  },
-  {
-    q: "Kenapa video preview loading hitam atau menampilkan error 'peer connection closed'?",
-    a: "WebRTC didesain untuk real-time video (< 0.5s delay) dan tidak mendukung H.264 video streams yang memiliki B-frames. Pada OBS Studio Anda, buka Settings > Output > ubah Output Mode ke Advanced. Pada tab Streaming, ubah 'Max B-frames' menjadi 0 (untuk encoder NVENC/AMD) atau ketik 'bframes=0' / 'tune=zerolatency' di kolom x264 Options."
   }
 ];
 
@@ -136,6 +140,12 @@ export default function Dashboard() {
 
   // Video Upload & Cloud Restream States
   const [userVideos, setUserVideos] = useState<VideoRecord[]>([]);
+  const [storageMetrics, setStorageMetrics] = useState<CloudStorageMetrics>({
+    usedBytes: '0',
+    maxBytes: '209715200',
+    maxLabel: '200 MB',
+    plan: 'free',
+  });
   const [uploading, setUploading] = useState<boolean>(false);
   const [uploadProgress, setUploadProgress] = useState<string>('');
   const [uploadError, setUploadError] = useState<string>('');
@@ -143,6 +153,9 @@ export default function Dashboard() {
   const [selectedVideoFile, setSelectedVideoFile] = useState<File | null>(null);
   const [videoTitleInput, setVideoTitleInput] = useState<string>('');
   const [cloudRestreamLoadingId, setCloudRestreamLoadingId] = useState<string | null>(null);
+
+  // Video Preview Modal State
+  const [previewVideo, setPreviewVideo] = useState<VideoRecord | null>(null);
 
   // Change password modal states
   const [isChangePassOpen, setIsChangePassOpen] = useState<boolean>(false);
@@ -262,6 +275,9 @@ export default function Dashboard() {
       if (videoData.videos) {
         setUserVideos(videoData.videos);
       }
+      if (videoData.storage) {
+        setStorageMetrics(videoData.storage);
+      }
       setLoading(false);
     } catch (err) {
       console.error('Failed to fetch stream data:', err);
@@ -322,7 +338,7 @@ export default function Dashboard() {
 
   // Delete Uploaded MP4 Video
   const handleDeleteVideo = async (videoId: string, title: string) => {
-    if (!confirm(`Apakah Anda yakin ingin menghapus video "${title}" dari Cloud Library?`)) return;
+    if (!confirm(`Apakah Anda yakin ingin menghapus video "${title}" dari Cloud Library? Sisa kapasitas penyimpanan Anda akan dikembalikan.`)) return;
 
     try {
       const res = await fetch('/api/video/list', {
@@ -581,6 +597,11 @@ export default function Dashboard() {
   const userPlan = (session?.user as any)?.plan || 'free';
   const userRole = (session?.user as any)?.role || 'user';
   const isCurrentlyRestreaming = telemetry.status === 'broadcasting';
+
+  // Storage Math Calculations
+  const usedMB = Number(BigInt(storageMetrics.usedBytes || '0')) / (1024 * 1024);
+  const maxMB = Number(BigInt(storageMetrics.maxBytes || '209715200')) / (1024 * 1024);
+  const usedPercent = Math.min(100, Math.round((usedMB / maxMB) * 100));
 
   return (
     <div className="app-container">
@@ -898,13 +919,24 @@ export default function Dashboard() {
 
           {/* ☁️ Cloud Restreaming (Tanpa OBS) Section */}
           <div className="card">
-            <div className="card-header">
+            <div className="card-header" style={{ flexWrap: 'wrap', gap: '12px' }}>
               <div className="card-title">
                 <Film size={18} color="var(--primary)" />
                 <span>Cloud Restreaming (Tanpa OBS) - MP4 Video Library</span>
               </div>
-              <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.04)', padding: '4px 12px', borderRadius: '10px', border: '1px solid var(--border)' }}>
-                Batas {userPlan.toUpperCase()}: <strong style={{ color: 'var(--primary)' }}>{userPlan === 'ultimate' ? 'Max 3 GB / 5 Jam Video' : userPlan === 'pro' ? 'Max 1 GB / 1 Jam Video' : 'Max 75 MB / 20 Menit Video'}</strong>
+
+              {/* Cloud Storage Capacity Meter Progress Bar */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'rgba(0,0,0,0.2)', padding: '8px 14px', borderRadius: '12px', border: '1px solid var(--border)' }}>
+                <HardDrive size={16} color="var(--primary)" />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-primary)', gap: '10px' }}>
+                    <span>Cloud Storage: <strong>{usedMB < 1000 ? `${usedMB.toFixed(1)} MB` : `${(usedMB / 1024).toFixed(2)} GB`}</strong> / {storageMetrics.maxLabel}</span>
+                    <span style={{ color: usedPercent > 90 ? '#f43f5e' : usedPercent > 75 ? '#f59e0b' : '#10b981' }}>{usedPercent}%</span>
+                  </div>
+                  <div style={{ width: '160px', height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: '3px', overflow: 'hidden' }}>
+                    <div style={{ width: `${usedPercent}%`, height: '100%', backgroundColor: usedPercent > 90 ? '#f43f5e' : usedPercent > 75 ? '#f59e0b' : '#10b981', transition: 'width 0.3s' }}></div>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -996,13 +1028,6 @@ export default function Dashboard() {
                               <FileVideo size={18} color="var(--primary)" />
                               <span style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)', wordBreak: 'break-all' }}>{vid.title}</span>
                             </div>
-                            <button
-                              style={{ background: 'transparent', border: 'none', color: '#f43f5e', cursor: 'pointer', padding: '4px' }}
-                              onClick={() => handleDeleteVideo(vid.id, vid.title)}
-                              title="Hapus Video Ini"
-                            >
-                              <Trash size={14} />
-                            </button>
                           </div>
 
                           <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', display: 'flex', gap: '12px', marginTop: '4px' }}>
@@ -1011,14 +1036,34 @@ export default function Dashboard() {
                           </div>
                         </div>
 
-                        <button
-                          style={{ width: '100%', padding: '10px', borderRadius: '8px', border: 'none', background: 'linear-gradient(135deg, var(--secondary) 0%, #059669 100%)', color: '#fff', fontWeight: 800, fontSize: '0.82rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', boxShadow: '0 0 15px rgba(16,185,129,0.3)' }}
-                          onClick={() => handleStartCloudRestream(vid.id)}
-                          disabled={cloudRestreamLoadingId === vid.id}
-                        >
-                          {cloudRestreamLoadingId === vid.id ? <RotateCw className="spin" size={14} /> : <PlayCircle size={14} />}
-                          <span>Mulai Cloud Restream (Tanpa OBS)</span>
-                        </button>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button
+                              style={{ flex: 1, padding: '8px', borderRadius: '8px', border: '1px solid var(--border)', background: 'rgba(255,255,255,0.04)', color: 'var(--text-primary)', fontWeight: 600, fontSize: '0.78rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
+                              onClick={() => setPreviewVideo(vid)}
+                            >
+                              <Eye size={13} />
+                              <span>Preview</span>
+                            </button>
+                            <button
+                              style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(244,63,94,0.3)', background: 'rgba(244,63,94,0.1)', color: '#fb7185', fontWeight: 600, fontSize: '0.78rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                              onClick={() => handleDeleteVideo(vid.id, vid.title)}
+                              title="Hapus Video dari Cloud Storage"
+                            >
+                              <Trash size={13} />
+                              <span>Hapus</span>
+                            </button>
+                          </div>
+
+                          <button
+                            style={{ width: '100%', padding: '10px', borderRadius: '8px', border: 'none', background: 'linear-gradient(135deg, var(--secondary) 0%, #059669 100%)', color: '#fff', fontWeight: 800, fontSize: '0.82rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', boxShadow: '0 0 15px rgba(16,185,129,0.3)' }}
+                            onClick={() => handleStartCloudRestream(vid.id)}
+                            disabled={cloudRestreamLoadingId === vid.id}
+                          >
+                            {cloudRestreamLoadingId === vid.id ? <RotateCw className="spin" size={14} /> : <PlayCircle size={14} />}
+                            <span>Mulai Cloud Restream (Tanpa OBS)</span>
+                          </button>
+                        </div>
                       </div>
                     );
                   })}
@@ -1238,6 +1283,47 @@ export default function Dashboard() {
         </main>
       </div>
 
+      {/* Video Stream Preview Modal */}
+      {previewVideo && (
+        <div className="modal-backdrop">
+          <div className="plan-modal-card" style={{ maxWidth: '680px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '16px', borderBottom: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Eye size={20} color="var(--primary)" />
+                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>Preview Video: {previewVideo.title}</h3>
+              </div>
+              <button style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }} onClick={() => setPreviewVideo(null)}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ marginTop: '20px' }}>
+              <video
+                src={`/api/video/stream?id=${previewVideo.id}`}
+                controls
+                autoPlay
+                style={{ width: '100%', borderRadius: '12px', background: '#000', maxHeight: '420px' }}
+              />
+            </div>
+
+            <div style={{ marginTop: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+              <span>Ukuran File: <strong>{(parseInt(previewVideo.sizeBytes) / (1024 * 1024)).toFixed(1)} MB</strong></span>
+              <span>Durasi Video: <strong>{Math.floor(previewVideo.durationSecs / 60)}m {previewVideo.durationSecs % 60}s</strong></span>
+              <button
+                style={{ background: 'var(--primary)', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '8px', fontWeight: 700, cursor: 'pointer' }}
+                onClick={() => {
+                  const vidId = previewVideo.id;
+                  setPreviewVideo(null);
+                  handleStartCloudRestream(vidId);
+                }}
+              >
+                Mulai Cloud Restream
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Change Password Modal */}
       {isChangePassOpen && (
         <div className="modal-backdrop">
@@ -1328,7 +1414,7 @@ export default function Dashboard() {
                 <ul className="plan-features">
                   <li>✅ Maksimal 2 Target Platform</li>
                   <li>✅ Batas Resolusi 720p HD</li>
-                  <li>☁️ Cloud Restream: Max 75 MB / 20m Video</li>
+                  <li>☁️ Cloud Storage: Max 200 MB Total Storage</li>
                   <li>⏱️ Max 4 Jam per Sesi Live</li>
                   <li>📢 Ad-Supported (100% Iklan & Watermark)</li>
                 </ul>
@@ -1352,7 +1438,7 @@ export default function Dashboard() {
                 <ul className="plan-features">
                   <li>✅ Maksimal 4 Target Platform</li>
                   <li>✅ Batas Resolusi 1080p Full HD</li>
-                  <li>☁️ Cloud Restream: Max 1 GB / 1 Jam Video</li>
+                  <li>☁️ Cloud Storage: Max 5 GB Total Storage</li>
                   <li>♾️ Unlimited Live Stream 24/7</li>
                   <li>✨ Minimal Ads (25% Minimal Iklan)</li>
                 </ul>
@@ -1375,7 +1461,7 @@ export default function Dashboard() {
                 <ul className="plan-features">
                   <li>✅ Maksimal 8 Target Platform</li>
                   <li>✅ Super Ultra HD 4K60 (3840x2160)</li>
-                  <li>☁️ Cloud Restream: Max 3 GB / 5 Jam Video</li>
+                  <li>☁️ Cloud Storage: Max 25 GB Total Storage</li>
                   <li>♾️ Unlimited Live Stream 24/7</li>
                   <li>👑 100% Ad-Free & Watermark-Free</li>
                 </ul>

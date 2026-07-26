@@ -8,8 +8,8 @@ echo.
 
 cd /d "%~dp0"
 
-echo [1/3] Menjalankan MediaMTX Streaming Server (Port 1935 RTMP & 8889 WebRTC)...
-start "MediaMTX Streaming Engine" /min mediamtx.exe
+echo [1/3] Menjalankan MediaMTX Streaming Server (Port 1935 RTMP dan Port 8889 WebRTC)...
+start "MediaMTX Server" /min C:\mediamtx\mediamtx.exe
 
 echo [2/3] Verifikasi Database SQLite (Prisma)...
 call npx prisma db push --skip-generate >nul 2>&1

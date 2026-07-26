@@ -68,6 +68,10 @@ const faqData: FAQItem[] = [
   {
     q: "Bagaimana cara melihat logs atau status dari proses restreaming?",
     a: "Di dashboard bagian bawah terdapat modul 'FFmpeg Output Logs'. Anda dapat memilih platform tujuan dari dropdown di sebelah kanan judul log untuk memantau status upload data stream secara real-time."
+  },
+  {
+    q: "Bagaimana cara membuat gambar live stream di YouTube terlihat super tajam dan jernih (VP09 / AV1 Codec Trick)?",
+    a: "Jebakan 1080p (AVC1 Codec YouTube): Jika Anda mengirim resolusi 1920x1080 ke YouTube, YouTube secara default mengompresnya menggunakan codec AVC1 (kompresi lama yang agak buram pada gerakan cepat).\n\nTrik Ketajaman Maksimal (VP09 / AV1 Codec): Di OBS Settings > Video > ubah Output (Scaled) Resolution menjadi 2560x1440 (2K) atau 3840x2160 (4K). Naikkan Bitrate OBS ke 12.000 - 15.000 Kbps. Hasilnya: YouTube secara otomatis akan memberikan codec premium VP09 / AV1 untuk live stream Anda. Gambar di YouTube akan menjadi super tajam, bening, dan crystal-clear!"
   }
 ];
 

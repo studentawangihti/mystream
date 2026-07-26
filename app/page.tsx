@@ -153,22 +153,26 @@ export default function Dashboard() {
     return () => mediaQuery.removeEventListener('change', handleSystemThemeChange);
   }, [theme]);
 
-  // Initialize Ingest Key from localStorage on mount
+  // Initialize Ingest Key per authenticated user from localStorage
   useEffect(() => {
-    const saved = localStorage.getItem('mystream_ingest_key');
+    if (!session?.user?.email) return;
+    const storageKey = `mystream_ingest_key_${session.user.email}`;
+    const saved = localStorage.getItem(storageKey);
     if (saved) {
       setIngestKey(saved);
     } else {
       const generated = 'stream_' + Math.random().toString(36).substring(2, 10);
       setIngestKey(generated);
-      localStorage.setItem('mystream_ingest_key', generated);
+      localStorage.setItem(storageKey, generated);
     }
-  }, []);
+  }, [session]);
 
   const handleRandomizeIngestKey = () => {
+    if (!session?.user?.email) return;
+    const storageKey = `mystream_ingest_key_${session.user.email}`;
     const generated = 'stream_' + Math.random().toString(36).substring(2, 10);
     setIngestKey(generated);
-    localStorage.setItem('mystream_ingest_key', generated);
+    localStorage.setItem(storageKey, generated);
     setPlayerKey(prev => prev + 1);
   };
 

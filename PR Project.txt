@@ -1,0 +1,141 @@
+================================================================================
+           MYSTREAM STUDIO - ROADMAP PR & FITUR MASA DEPAN (FUTURE EYES)
+================================================================================
+Dokumen ini berisi daftar PR (Pull Request) / fitur masa depan yang direkomendasikan
+untuk dikembangkan pada fase berikutnya guna menskalakan MyStream Studio menjadi
+platform SaaS Multistreaming komersial tingkat tinggi.
+
+================================================================================
+[ 1. REKAPITULASI STATUS FITUR SAAT INI (COMPLETED BASELINE) ]
+================================================================================
+✅ Multi-Tenant Multi-User Authentication (NextAuth.js v4 + SQLite Prisma).
+✅ Permanent Stream Key per User dengan Quota Reset 24 Jam.
+✅ WebRTC WHEP Live Monitor Feed (< 0.5 detik latensi).
+✅ Telemetry Analytics Live (FPS, Bitrate, Durasi, Kualitas Jaringan).
+✅ Matriks Keanggotaan 3-Tier (Free Plan 720p, Pro Member 1080p, Ultimate VIP 4K).
+✅ Proteksi Bandwidth Auto-Reject Resolusi 0.5s & Auto-Stop 4 Jam (Free Plan).
+✅ Super Admin Control Center Dashboard (/admin) dengan Overide Plan 1-Click.
+✅ Pengelolaan Password Lengkap (Ganti Password & Lupa/Reset Password Token).
+✅ Skrip Peluncur 1-Click Launch (start.bat / start-mystream.bat).
+✅ Dokumentasi Setup & Workflow Lengkap (Dokumentasi Project-Setup.md).
+
+
+================================================================================
+[ 2. DAFTAR PR & RINCIAN EKSPLORASI FITUR MASA DEPAN (ROADMAP) ]
+================================================================================
+
+--------------------------------------------------------------------------------
+PR #1: INTEGRASI PAYMENT GATEWAY OTOMATIS (AUTOMATED BILLING & SUBsCRIPTION)
+--------------------------------------------------------------------------------
+Deskripsi:
+Integrasi dengan Payment Gateway lokal Indonesia (Midtrans, Xendit, atau Tripay) untuk
+memproses pembayaran otomatis langganan Pro Member (Rp 49rb/bln) dan Ultimate VIP (Rp 99rb/bln).
+
+Spesifikasi Teknis:
+- Pembuatan API Webhook Notification (`/api/payment/webhook`).
+- Mendukung metode pembayaran QRIS (GoPay, OVO, ShopeePay, Dana), Virtual Account BCA/Mandiri/BRI, dan E-Wallet.
+- Otomatisasi Upgrade Plan saat callback pembayaran `status = SETTLED` atau `PAID`.
+- Fitur CRON Job harian untuk mengecek masa aktif langganan (30 hari).
+- Auto-Downgrade otomatis kembali ke Free Plan jika pengguna tidak memperpanjang masa aktif.
+
+
+--------------------------------------------------------------------------------
+PR #2: WATERMARK OVERLAY & SPONSOR AD INJECTION ENGINE FOR FREE USERS
+--------------------------------------------------------------------------------
+Deskripsi:
+Menambahkan logo/watermark "Powered by MyStream Free" atau banner iklan sponsor secara otomatis
+pada video siaran milik pengguna Free Plan.
+
+Spesifikasi Teknis:
+- Backend FFmpeg Switcher Mode:
+  - User Pro & Ultimate: Menggunakan Pass-through super hemat CPU (`-c copy`).
+  - User Free Plan: Menggunakan Video Encoding Filter (`-vf drawtext` / `-vf overlay`).
+- Pengaturan posisi watermark di pojok kanan atas video siaran.
+- Modul manajemen iklan sponsor di Admin Panel untuk mengganti banner iklan secara dinamis.
+
+
+--------------------------------------------------------------------------------
+PR #3: STREAM RECORDING & VOD ARCHIVE STORAGE (SAVE STREAM TO CLOUD)
+--------------------------------------------------------------------------------
+Deskripsi:
+Fitur merekam siaran live secara otomatis dan menyimpannya sebagai file video VOD (Video on Demand)
+yang dapat diunduh atau diputar ulang oleh streamer.
+
+Spesifikasi Teknis:
+- Integrasi MediaMTX Record Segment (`record: yes` di mediamtx.yml).
+- Penyimpanan file rekaman ke Cloud Object Storage S3-Compatible (Cloudflare R2 / AWS S3 / MinIO).
+- Halaman UI "VOD Library" di Dashboard untuk melihat, memutar, dan mengunduh rekaman siaran.
+- Kuota Penyimpanan: Free (0 GB / Tanpa Rekaman), Pro (20 GB VOD), Ultimate (100 GB VOD).
+
+
+--------------------------------------------------------------------------------
+PR #4: MULTI-REGION EDGE INGEST & GEO-DNS ACCELERATION
+--------------------------------------------------------------------------------
+Deskripsi:
+Penyebaran server penerima sinyal (Ingest Node) MediaMTX ke beberapa lokasi geografis VPS
+(Singapore, Jakarta, US East, Frankfurt) untuk meminimalkan ping/latency bagi streamer internasional.
+
+Spesifikasi Teknis:
+- Implementasi Geo-DNS Routing yang mengarahkan `rtmp://restream.awgverse.io/live` ke server Ingest terdekat dari posisi IP streamer.
+- Hubungan RTMP Relay Internal dari Node Edge ke Main Distribution Server.
+
+
+--------------------------------------------------------------------------------
+PR #5: UNIFIED CHAT AGGREGATOR (LIVE MULTISTREAM CHAT BOX)
+--------------------------------------------------------------------------------
+Deskripsi:
+Menggabungkan kolom obrolan (Chat Box) dari seluruh platform tujuan (YouTube Live, Twitch, Facebook Live)
+ke dalam 1 jendela Chat Unified di Dashboard Streamer.
+
+Spesifikasi Teknis:
+- Integrasi WebSocket & API Chat per platform:
+  - YouTube Live Chat API (Polled/WebSocket)
+  - Twitch IRC WebSocket Chat (`irc.chat.twitch.tv`)
+- Tampilan overlay chat terpadu yang dapat ditampilkan di layar siaran OBS (OBS Browser Source Overlay).
+
+
+--------------------------------------------------------------------------------
+PR #6: PRE-RECORDED LOOP STREAMING (SCHEDULED 24/7 MP4 STREAMING)
+--------------------------------------------------------------------------------
+Deskripsi:
+Fitur melakukan siaran live streaming 24 jam nonstop dari file video MP4 yang diunggah,
+tanpa membutuhkan OBS Studio atau komputer streamer yang harus terus menyala.
+
+Spesifikasi Teknis:
+- Modul unggah file MP4 ke server backend.
+- FFmpeg Loop Engine (`ffmpeg -stream_loop -1 -re -i video.mp4 -c copy ...`).
+- Penjadwalan jam tayang siaran otomatis (Scheduled Streamer).
+- Eksklusif untuk pengguna Pro Member dan Ultimate VIP.
+
+
+--------------------------------------------------------------------------------
+PR #7: SECURITY HARDENING & DDOS PROTECTION
+--------------------------------------------------------------------------------
+Deskripsi:
+Peningkatan keamanan tingkat tinggi untuk melindungi server dari serangan brute force login,
+pencurian stream key, dan serangan kehabisan port.
+
+Spesifikasi Teknis:
+- Rate Limiting API Endpoints menggunakan LRU Cache / Redis Rate Limiter.
+- Otentikasi Hook MediaMTX (`on_publish` & `on_read`) untuk memverifikasi Stream Key langsung ke database SQLite sebelum mengizinkan sinyal RTMP OBS masuk.
+- Otentikasi Dua Faktor (2FA TOTP / Google Authenticator) untuk login akun Super Admin.
+
+
+--------------------------------------------------------------------------------
+PR #8: DOCKERIZATION & 1-COMMAND PRODUCTION DEPLOYMENT
+--------------------------------------------------------------------------------
+Deskripsi:
+Membungkus seluruh infrastruktur aplikasi (Next.js, MediaMTX, FFmpeg, dan Database) ke dalam
+kontainer Docker agar siap dideploy ke VPS cloud mana pun dengan 1 perintah.
+
+Spesifikasi Teknis:
+- Pembuatan `Dockerfile` multi-stage build.
+- Pembuatan `docker-compose.yml` yang mengatur service Next.js App Router, MediaMTX Engine, dan volume database SQLite/PostgreSQL.
+- Perintah deploy 1-klik: `docker compose up -d`.
+
+
+================================================================================
+Dokumen dibuat oleh: Advanced AI Coding Assistant (Antigravity)
+Tanggal: 27 Juli 2026
+Proyek: MyStream Studio - Broadcast Command Center
+================================================================================

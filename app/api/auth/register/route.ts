@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
 
 export async function POST(req: Request) {
@@ -32,12 +33,14 @@ export async function POST(req: Request) {
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
+    const ingestKey = 'awg_live_' + crypto.randomBytes(6).toString('hex');
 
     const user = await prisma.user.create({
       data: {
         name: name || email.split('@')[0],
         email: email.toLowerCase(),
         password: hashedPassword,
+        ingestKey,
       },
     });
 
@@ -45,7 +48,7 @@ export async function POST(req: Request) {
       { 
         success: true, 
         message: 'Registrasi berhasil!', 
-        user: { id: user.id, name: user.name, email: user.email } 
+        user: { id: user.id, name: user.name, email: user.email, ingestKey: user.ingestKey } 
       },
       { status: 201 }
     );

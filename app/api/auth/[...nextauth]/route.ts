@@ -37,6 +37,8 @@ export const authOptions: NextAuthOptions = {
           id: user.id,
           name: user.name,
           email: user.email,
+          ingestKey: user.ingestKey,
+          lastResetAt: user.lastResetAt ? user.lastResetAt.toISOString() : null,
         };
       },
     }),
@@ -45,15 +47,23 @@ export const authOptions: NextAuthOptions = {
     strategy: 'jwt',
   },
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
       if (user) {
         token.id = user.id;
+        token.ingestKey = (user as any).ingestKey;
+        token.lastResetAt = (user as any).lastResetAt;
+      }
+      if (trigger === 'update' && session?.ingestKey) {
+        token.ingestKey = session.ingestKey;
+        token.lastResetAt = session.lastResetAt;
       }
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
         (session.user as any).id = token.id as string;
+        (session.user as any).ingestKey = token.ingestKey as string;
+        (session.user as any).lastResetAt = token.lastResetAt as string | null;
       }
       return session;
     },

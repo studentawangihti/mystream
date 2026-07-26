@@ -35,7 +35,8 @@ import {
   Wifi,
   Clock,
   Gauge,
-  Users
+  Users,
+  ShieldCheck
 } from 'lucide-react';
 
 interface Telemetry {
@@ -73,7 +74,7 @@ const faqData: FAQItem[] = [
   },
   {
     q: "Bagaimana cara melakukan konfigurasi OBS Studio ke sistem restreaming ini?",
-    a: "Buka OBS Settings > Stream. Pilih Service ke 'Custom...'. Isi Server URL dengan 'rtmp://127.0.0.1:1935/live' dan isi Stream Key dengan key acak yang tertera di panel 'Konfigurasi Ingest Stream Key' di dashboard ini. Tekan Apply, lalu klik Start Streaming."
+    a: "Buka OBS Settings > Stream. Pilih Service ke 'Custom...'. Isi Server URL dengan 'rtmp://restream.awgverse.io/live' dan isi Stream Key dengan key unik akun Anda (contoh: awg_live_xxx). Tekan Apply, lalu klik Start Streaming."
   },
   {
     q: "Berapa banyak platform tujuan (multistreaming) yang didukung?",
@@ -90,7 +91,7 @@ const faqData: FAQItem[] = [
 ];
 
 export default function Dashboard() {
-  const { data: session, status: sessionStatus } = useSession();
+  const { data: session, status: sessionStatus, update: updateSession } = useSession();
   const router = useRouter();
 
   const [destinations, setDestinations] = useState<Destination[]>([]);
@@ -98,8 +99,9 @@ export default function Dashboard() {
   const [logs, setLogs] = useState<string[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [actionLoading, setActionLoading] = useState<boolean>(false);
+  const [resetKeyLoading, setResetKeyLoading] = useState<boolean>(false);
   const [ffmpegPath, setFfmpegPath] = useState<string>('');
-  const [ingestKey, setIngestKey] = useState<string>('test');
+  const [ingestKey, setIngestKey] = useState<string>('awg_live_default');
   const [playerKey, setPlayerKey] = useState<number>(0);
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
   const [isFaqOpen, setIsFaqOpen] = useState<boolean>(false);
@@ -121,6 +123,14 @@ export default function Dashboard() {
       router.push('/login');
     }
   }, [sessionStatus, router]);
+
+  // Set user's permanent ingestKey from NextAuth session
+  useEffect(() => {
+    const sessionKey = (session?.user as any)?.ingestKey;
+    if (sessionKey) {
+      setIngestKey(sessionKey);
+    }
+  }, [session]);
 
   // Auto-hide header when scrolling down
   useEffect(() => {
@@ -171,29 +181,6 @@ export default function Dashboard() {
     return () => mediaQuery.removeEventListener('change', handleSystemThemeChange);
   }, [theme]);
 
-  // Initialize Ingest Key per authenticated user from localStorage
-  useEffect(() => {
-    if (!session?.user?.email) return;
-    const storageKey = `mystream_ingest_key_${session.user.email}`;
-    const saved = localStorage.getItem(storageKey);
-    if (saved) {
-      setIngestKey(saved);
-    } else {
-      const generated = 'stream_' + Math.random().toString(36).substring(2, 10);
-      setIngestKey(generated);
-      localStorage.setItem(storageKey, generated);
-    }
-  }, [session]);
-
-  const handleRandomizeIngestKey = () => {
-    if (!session?.user?.email) return;
-    const storageKey = `mystream_ingest_key_${session.user.email}`;
-    const generated = 'stream_' + Math.random().toString(36).substring(2, 10);
-    setIngestKey(generated);
-    localStorage.setItem(storageKey, generated);
-    setPlayerKey(prev => prev + 1);
-  };
-
   // 1. Fetch Configuration & Status
   const fetchData = async () => {
     if (sessionStatus !== 'authenticated') return;
@@ -219,6 +206,43 @@ export default function Dashboard() {
   useEffect(() => {
     fetchData();
   }, [sessionStatus]);
+
+  // Handle Stream Key Reset with 24-hour rate limit quota
+  const handleRandomizeIngestKey = async () => {
+    if (isCurrentlyRestreaming) {
+      alert('Tidak dapat mengacak Stream Key saat siaran live sedang aktif.');
+      return;
+    }
+
+    if (!confirm('Apakah Anda yakin ingin mengacak Stream Key akun Anda? (Kuota: 1x per 24 jam). Anda harus memperbarui Stream Key di OBS Studio setelah ini.')) {
+      return;
+    }
+
+    setResetKeyLoading(true);
+    try {
+      const res = await fetch('/api/user/reset-ingest-key', {
+        method: 'POST',
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(data.error || 'Gagal mereset Stream Key');
+        return;
+      }
+
+      if (data.ingestKey) {
+        setIngestKey(data.ingestKey);
+        await updateSession({ ingestKey: data.ingestKey, lastResetAt: data.lastResetAt });
+        setPlayerKey(prev => prev + 1);
+        alert(data.message);
+      }
+    } catch (err) {
+      console.error('Reset Ingest Key error:', err);
+      alert('Terjadi kesalahan saat mengacak Stream Key');
+    } finally {
+      setResetKeyLoading(false);
+    }
+  };
 
   // 2. Poll Logs & Telemetry for the selected destination if streaming/error
   useEffect(() => {
@@ -767,23 +791,27 @@ export default function Dashboard() {
             <div id="sec-ingest" className="card">
               <div className="card-title">
                 <Settings size={18} style={{ color: 'var(--primary)' }} />
-                <span>Konfigurasi Ingest Stream OBS</span>
+                <span>Konfigurasi Ingest Server OBS (Publik)</span>
+                
+                <span style={{ marginLeft: 'auto', fontSize: '0.75rem', background: 'rgba(99, 102, 241, 0.15)', color: 'var(--primary)', padding: '2px 8px', borderRadius: '12px', border: '1px solid rgba(99, 102, 241, 0.3)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <ShieldCheck size={12} /> Stream Key Permanen Unik
+                </span>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '16px' }}>
                 <div className="form-group">
-                  <label className="form-label">Server URL (OBS)</label>
+                  <label className="form-label">Server URL (OBS Custom Service)</label>
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <input 
                       type="text" 
                       readOnly 
                       className="input-text" 
-                      style={{ flex: 1, fontFamily: 'var(--font-mono)' }}
-                      value="rtmp://127.0.0.1:1935/live"
+                      style={{ flex: 1, fontFamily: 'var(--font-mono)', fontWeight: '700', color: 'var(--secondary)' }}
+                      value="rtmp://restream.awgverse.io/live"
                     />
                     <button 
                       className="btn btn-secondary" 
-                      onClick={() => copyToClipboard("rtmp://127.0.0.1:1935/live", 'server')}
+                      onClick={() => copyToClipboard("rtmp://restream.awgverse.io/live", 'server')}
                       style={{ padding: '0 14px' }}
                       title="Copy Server URL"
                     >
@@ -793,7 +821,7 @@ export default function Dashboard() {
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Stream Key Acak (OBS)</label>
+                  <label className="form-label">Stream Key Akun Anda (Permanen Unik)</label>
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <input 
                       type="text" 
@@ -813,13 +841,16 @@ export default function Dashboard() {
                     <button 
                       className="btn btn-primary" 
                       onClick={handleRandomizeIngestKey}
-                      disabled={isCurrentlyRestreaming}
+                      disabled={isCurrentlyRestreaming || resetKeyLoading}
                       style={{ padding: '0 14px' }}
-                      title="Ganti Acak Stream Key"
+                      title="Acak Key Baru (Kuota 1x / 24 Jam)"
                     >
-                      🎲 Acak Key
+                      {resetKeyLoading ? <RotateCw size={14} className="animate-spin" /> : '🎲 Acak Key (1x/Hari)'}
                     </button>
                   </div>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
+                    💡 Kuota acak Stream Key: Maksimal 1x per 24 jam untuk keamanan akun Anda.
+                  </span>
                 </div>
               </div>
             </div>
@@ -1014,8 +1045,8 @@ export default function Dashboard() {
               </h3>
               <ol style={{ paddingLeft: '16px', display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
                 <li>OBS Settings &gt; Stream &gt; Service: <strong>Custom...</strong></li>
-                <li>Server: <code style={{ color: 'var(--text-primary)', background: 'rgba(255,255,255,0.04)', padding: '2px 6px', borderRadius: '4px' }}>rtmp://127.0.0.1:1935/live</code></li>
-                <li>Stream Key: <code style={{ color: 'var(--text-primary)', background: 'rgba(255,255,255,0.04)', padding: '2px 6px', borderRadius: '4px' }}>{ingestKey}</code></li>
+                <li>Server: <code style={{ color: 'var(--secondary)', background: 'rgba(255,255,255,0.04)', padding: '2px 6px', borderRadius: '4px', fontWeight: '700' }}>rtmp://restream.awgverse.io/live</code></li>
+                <li>Stream Key: <code style={{ color: 'var(--text-primary)', background: 'rgba(255,255,255,0.04)', padding: '2px 6px', borderRadius: '4px', fontWeight: '700' }}>{ingestKey}</code></li>
                 <li>Output &gt; Streaming &gt; Keyframe Interval: <strong>2s</strong></li>
                 <li>Output &gt; Streaming &gt; Max B-frames: <strong>0</strong> (Wajib WebRTC).</li>
               </ol>

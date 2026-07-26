@@ -120,6 +120,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState<boolean>(true);
   const [actionLoading, setActionLoading] = useState<boolean>(false);
   const [resetKeyLoading, setResetKeyLoading] = useState<boolean>(false);
+  const [savingDestinations, setSavingDestinations] = useState<boolean>(false);
   const [ffmpegPath, setFfmpegPath] = useState<string>('');
   const [ingestKey, setIngestKey] = useState<string>('awg_live_default');
   const [playerKey, setPlayerKey] = useState<number>(0);
@@ -129,6 +130,9 @@ export default function Dashboard() {
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('system');
   const [copiedServer, setCopiedServer] = useState<boolean>(false);
   const [copiedKey, setCopiedKey] = useState<boolean>(false);
+
+  // Unsaved destination edits ref to prevent 3s polling from wiping out user input
+  const isEditingDestinationsRef = useRef<boolean>(false);
 
   // Video Upload & Cloud Restream States
   const [userVideos, setUserVideos] = useState<VideoRecord[]>([]);
@@ -243,7 +247,7 @@ export default function Dashboard() {
       const data = await restreamRes.json();
       const videoData = await videosRes.json();
 
-      if (data.destinations) {
+      if (data.destinations && !isEditingDestinationsRef.current) {
         setDestinations(data.destinations);
         if (data.destinations.length > 0 && !data.destinations.find((d: any) => d.id === selectedDestId)) {
           setSelectedDestId(data.destinations[0].id);
@@ -468,7 +472,8 @@ export default function Dashboard() {
       return;
     }
 
-    const newId = Date.now().toString();
+    isEditingDestinationsRef.current = true;
+    const newId = `temp_${Date.now()}`;
     setDestinations([
       ...destinations,
       {
@@ -487,7 +492,36 @@ export default function Dashboard() {
       alert('Minimal harus ada 1 platform tujuan.');
       return;
     }
+    isEditingDestinationsRef.current = true;
     setDestinations(destinations.filter((d) => d.id !== id));
+  };
+
+  // Save All Destination Configurations to DB
+  const handleSaveDestinations = async () => {
+    setSavingDestinations(true);
+    try {
+      const res = await fetch('/api/restream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'save_destinations', destinations }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(data.error || 'Gagal menyimpan target platform.');
+      } else {
+        alert(data.message);
+        if (data.destinations) {
+          setDestinations(data.destinations);
+        }
+        isEditingDestinationsRef.current = false;
+      }
+    } catch (err) {
+      alert('Terjadi kesalahan koneksi.');
+    } finally {
+      setSavingDestinations(false);
+    }
   };
 
   // Handle Start / Stop Restream
@@ -892,12 +926,19 @@ export default function Dashboard() {
                   <label className="form-label">PILIH FILE VIDEO (.MP4 ONLY)</label>
                   <input
                     type="file"
-                    accept="video/mp4"
+                    accept="video/mp4, .mp4"
                     className="input-text"
                     style={{ padding: '8px 12px' }}
                     onChange={(e) => {
                       if (e.target.files && e.target.files[0]) {
-                        setSelectedVideoFile(e.target.files[0]);
+                        const file = e.target.files[0];
+                        if (!file.name.toLowerCase().endsWith('.mp4')) {
+                          alert('Hanya file video ber-ekstensi .MP4 yang diizinkan!');
+                          e.target.value = '';
+                          setSelectedVideoFile(null);
+                          return;
+                        }
+                        setSelectedVideoFile(file);
                       }
                     }}
                   />
@@ -1137,6 +1178,7 @@ export default function Dashboard() {
                           className="input-text"
                           value={dest.name}
                           onChange={(e) => {
+                            isEditingDestinationsRef.current = true;
                             const newDestArr = [...destinations];
                             newDestArr[idx].name = e.target.value;
                             setDestinations(newDestArr);
@@ -1152,6 +1194,7 @@ export default function Dashboard() {
                           className="input-text"
                           value={dest.rtmpUrl}
                           onChange={(e) => {
+                            isEditingDestinationsRef.current = true;
                             const newDestArr = [...destinations];
                             newDestArr[idx].rtmpUrl = e.target.value;
                             setDestinations(newDestArr);
@@ -1167,6 +1210,7 @@ export default function Dashboard() {
                           className="input-text"
                           value={dest.streamKey}
                           onChange={(e) => {
+                            isEditingDestinationsRef.current = true;
                             const newDestArr = [...destinations];
                             newDestArr[idx].streamKey = e.target.value;
                             setDestinations(newDestArr);
@@ -1178,10 +1222,12 @@ export default function Dashboard() {
                   ))}
 
                   <button 
-                    style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'var(--text-primary)', padding: '12px', borderRadius: '10px', fontSize: '0.88rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', width: '100%', marginTop: '8px' }}
+                    style={{ background: 'var(--primary)', color: '#fff', border: 'none', padding: '12px', borderRadius: '10px', fontSize: '0.88rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', width: '100%', marginTop: '8px', boxShadow: '0 0 20px rgba(99,102,241,0.3)' }}
+                    onClick={handleSaveDestinations}
+                    disabled={savingDestinations}
                   >
-                    <Save size={16} />
-                    <span>Simpan Semua Konfigurasi Target</span>
+                    {savingDestinations ? <RotateCw className="spin" size={16} /> : <Save size={16} />}
+                    <span>{savingDestinations ? 'Memproses Penyimpanan...' : 'Simpan Semua Konfigurasi Target'}</span>
                   </button>
                 </div>
               </div>

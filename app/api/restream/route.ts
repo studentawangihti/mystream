@@ -43,7 +43,7 @@ export async function GET(req: Request) {
     // Fetch user destinations from DB
     const destinations = await prisma.destination.findMany({
       where: { userId },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: 'asc' },
     });
 
     const dbUser = await prisma.user.findUnique({
@@ -106,12 +106,69 @@ export async function POST(req: Request) {
     const userPlan = dbUser?.plan || 'free';
     const userIngestKey = dbUser?.ingestKey || (session.user as any).ingestKey;
 
-    const { action, videoId } = await req.json();
+    const { action, videoId, destinations: incomingDestinations } = await req.json();
 
     let activeMap = userProcesses.get(userId);
     if (!activeMap) {
       activeMap = new Map<string, ChildProcess>();
       userProcesses.set(userId, activeMap);
+    }
+
+    // --- ACTION: SAVE DESTINATIONS TO DB ---
+    if (action === 'save_destinations') {
+      if (!Array.isArray(incomingDestinations)) {
+        return NextResponse.json({ error: 'Data platform tidak valid.' }, { status: 400 });
+      }
+
+      const maxPlatforms = userPlan === 'ultimate' ? 8 : userPlan === 'pro' ? 4 : 2;
+      if (incomingDestinations.length > maxPlatforms) {
+        return NextResponse.json(
+          { error: `Plan Anda (${userPlan.toUpperCase()}) dibatasi maksimal ${maxPlatforms} platform target.` },
+          { status: 403 }
+        );
+      }
+
+      // Sync destinations in DB
+      const existingInDb = await prisma.destination.findMany({ where: { userId } });
+      const incomingIds = incomingDestinations.map((d: any) => d.id).filter((id: string) => id.length > 20); // valid UUIDs
+
+      // Delete removed destinations
+      const toDelete = existingInDb.filter((d) => !incomingIds.includes(d.id));
+      for (const d of toDelete) {
+        await prisma.destination.delete({ where: { id: d.id } });
+      }
+
+      // Upsert incoming destinations
+      const savedDestinations = [];
+      for (const d of incomingDestinations) {
+        if (d.id && d.id.length > 20 && existingInDb.some((e) => e.id === d.id)) {
+          const updated = await prisma.destination.update({
+            where: { id: d.id },
+            data: {
+              name: d.name || 'Platform Target',
+              rtmpUrl: d.rtmpUrl || '',
+              streamKey: d.streamKey || '',
+            },
+          });
+          savedDestinations.push(updated);
+        } else {
+          const created = await prisma.destination.create({
+            data: {
+              userId,
+              name: d.name || 'Platform Target Baru',
+              rtmpUrl: d.rtmpUrl || '',
+              streamKey: d.streamKey || '',
+            },
+          });
+          savedDestinations.push(created);
+        }
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: 'Semua konfigurasi target platform berhasil disimpan ke database!',
+        destinations: savedDestinations,
+      });
     }
 
     // --- ACTION: START CLOUD RESTREAM (WITHOUT OBS) ---
@@ -204,7 +261,7 @@ export async function POST(req: Request) {
       });
     }
 
-    // --- ACTION: START ALL (OBS OBS INGEST MODE) ---
+    // --- ACTION: START ALL (OBS INGEST MODE) ---
     if (action === 'start_all') {
       const destinations = await prisma.destination.findMany({
         where: { userId },

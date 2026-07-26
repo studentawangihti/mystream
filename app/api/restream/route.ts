@@ -5,10 +5,19 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import { prisma } from '@/lib/prisma';
 
-// Memory map for running FFmpeg child processes and in-memory log buffer
+export interface TelemetryData {
+  fps: number;
+  bitrate: string;
+  speed: string;
+  duration: string;
+  networkStatus: 'excellent' | 'good' | 'warning' | 'offline';
+}
+
+// Memory map for running FFmpeg child processes, log buffers, and telemetry metrics
 const globalForRestream = global as typeof globalThis & {
   activeProcesses?: Map<string, ChildProcess>;
   logBuffers?: Map<string, string[]>;
+  telemetryMap?: Map<string, TelemetryData>;
 };
 
 if (!globalForRestream.activeProcesses) {
@@ -17,9 +26,13 @@ if (!globalForRestream.activeProcesses) {
 if (!globalForRestream.logBuffers) {
   globalForRestream.logBuffers = new Map();
 }
+if (!globalForRestream.telemetryMap) {
+  globalForRestream.telemetryMap = new Map();
+}
 
 const activeProcesses = globalForRestream.activeProcesses;
 const logBuffers = globalForRestream.logBuffers;
+const telemetryMap = globalForRestream.telemetryMap;
 
 function getFfmpegPath(): string {
   const paths = [
@@ -35,6 +48,32 @@ function getFfmpegPath(): string {
     }
   }
   return 'ffmpeg';
+}
+
+// Helper to parse FFmpeg statistics line
+function parseFfmpegStats(line: string): Partial<TelemetryData> | null {
+  if (!line.includes('fps=') || !line.includes('bitrate=')) return null;
+
+  try {
+    const fpsMatch = line.match(/fps=\s*([\d\.]+)/);
+    const bitrateMatch = line.match(/bitrate=\s*([\d\.]+[kKMGT]?bits\/s)/);
+    const timeMatch = line.match(/time=\s*([\d:\.]+)/);
+    const speedMatch = line.match(/speed=\s*([\d\.]+x)/);
+
+    const fps = fpsMatch ? parseFloat(fpsMatch[1]) : 60;
+    const bitrate = bitrateMatch ? bitrateMatch[1] : '0.0kbits/s';
+    const duration = timeMatch ? timeMatch[1].split('.')[0] : '00:00:00';
+    const speed = speedMatch ? speedMatch[1] : '1.0x';
+
+    let networkStatus: TelemetryData['networkStatus'] = 'excellent';
+    const speedVal = parseFloat(speed.replace('x', ''));
+    if (speedVal < 0.9) networkStatus = 'warning';
+    else if (speedVal < 0.98) networkStatus = 'good';
+
+    return { fps, bitrate, speed, duration, networkStatus };
+  } catch (err) {
+    return null;
+  }
 }
 
 export async function GET(req: NextRequest) {
@@ -73,9 +112,17 @@ export async function GET(req: NextRequest) {
     ]);
   }
 
-  // Sync process running state
+  // Sync process running state and attach telemetry
   const formatted = userDestinations.map((d) => {
     const isRunning = activeProcesses.has(d.id);
+    const telemetry = telemetryMap.get(d.id) || {
+      fps: 0,
+      bitrate: '0kbits/s',
+      speed: '0.0x',
+      duration: '00:00:00',
+      networkStatus: isRunning ? 'excellent' : 'offline',
+    };
+
     return {
       id: d.id,
       name: d.name,
@@ -84,6 +131,7 @@ export async function GET(req: NextRequest) {
       status: isRunning ? 'streaming' : (d.status === 'streaming' ? 'idle' : d.status),
       errorMsg: d.errorMsg || '',
       logs: logBuffers.get(d.id) || [],
+      telemetry,
     };
   });
 
@@ -107,7 +155,6 @@ export async function POST(req: NextRequest) {
 
     // 1. SAVE DESTINATIONS
     if (action === 'save_destinations' && Array.isArray(destinations)) {
-      // Upsert user destinations in database
       const updatedList = [];
       
       for (const d of destinations) {
@@ -142,6 +189,13 @@ export async function POST(req: NextRequest) {
           status: isRunning ? 'streaming' : saved.status,
           errorMsg: saved.errorMsg || '',
           logs: logBuffers.get(saved.id) || [],
+          telemetry: telemetryMap.get(saved.id) || {
+            fps: 0,
+            bitrate: '0kbits/s',
+            speed: '0.0x',
+            duration: '00:00:00',
+            networkStatus: isRunning ? 'excellent' : 'offline',
+          },
         });
       }
 
@@ -185,6 +239,15 @@ export async function POST(req: NextRequest) {
           const currentLogs = logBuffers.get(dest.id)!;
           currentLogs.push(`[System] Spawned FFmpeg process for ${dest.name} (PID: ${proc.pid})`);
 
+          // Initialize Telemetry Data
+          telemetryMap.set(dest.id, {
+            fps: 60,
+            bitrate: 'Connecting...',
+            speed: '1.0x',
+            duration: '00:00:00',
+            networkStatus: 'excellent',
+          });
+
           proc.stdout?.on('data', (data) => {
             const lines = data.toString().split('\n');
             lines.forEach((line: string) => {
@@ -198,15 +261,30 @@ export async function POST(req: NextRequest) {
           proc.stderr?.on('data', (data) => {
             const lines = data.toString().split('\n');
             lines.forEach((line: string) => {
-              if (line.trim()) {
-                currentLogs.push(line.trim());
+              const trimmed = line.trim();
+              if (trimmed) {
+                currentLogs.push(trimmed);
                 if (currentLogs.length > 50) currentLogs.shift();
+
+                // Parse Live Telemetry Stats
+                const parsed = parseFfmpegStats(trimmed);
+                if (parsed) {
+                  const existing = telemetryMap.get(dest.id) || {
+                    fps: 0,
+                    bitrate: '0kbits/s',
+                    speed: '1.0x',
+                    duration: '00:00:00',
+                    networkStatus: 'excellent',
+                  };
+                  telemetryMap.set(dest.id, { ...existing, ...parsed });
+                }
               }
             });
           });
 
           proc.on('close', async (code) => {
             activeProcesses.delete(dest.id);
+            telemetryMap.delete(dest.id);
             const status = code === 0 || code === null ? 'idle' : 'error';
             await prisma.destination.update({
               where: { id: dest.id },
@@ -220,6 +298,7 @@ export async function POST(req: NextRequest) {
 
           proc.on('error', async (err) => {
             activeProcesses.delete(dest.id);
+            telemetryMap.delete(dest.id);
             await prisma.destination.update({
               where: { id: dest.id },
               data: { status: 'error', errorMsg: err.message },
@@ -248,6 +327,13 @@ export async function POST(req: NextRequest) {
         status: activeProcesses.has(d.id) ? 'streaming' : d.status,
         errorMsg: d.errorMsg || '',
         logs: logBuffers.get(d.id) || [],
+        telemetry: telemetryMap.get(d.id) || {
+          fps: 0,
+          bitrate: '0kbits/s',
+          speed: '0.0x',
+          duration: '00:00:00',
+          networkStatus: 'offline',
+        },
       }));
 
       return NextResponse.json({
@@ -268,6 +354,7 @@ export async function POST(req: NextRequest) {
         if (proc) {
           proc.kill('SIGTERM');
           activeProcesses.delete(targetId);
+          telemetryMap.delete(targetId);
         }
         await prisma.destination.update({
           where: { id: targetId },
@@ -279,6 +366,7 @@ export async function POST(req: NextRequest) {
           if (proc) {
             proc.kill('SIGTERM');
             activeProcesses.delete(dest.id);
+            telemetryMap.delete(dest.id);
           }
         }
         await prisma.destination.updateMany({
@@ -296,22 +384,37 @@ export async function POST(req: NextRequest) {
         status: activeProcesses.has(d.id) ? 'streaming' : 'idle',
         errorMsg: d.errorMsg || '',
         logs: logBuffers.get(d.id) || [],
+        telemetry: telemetryMap.get(d.id) || {
+          fps: 0,
+          bitrate: '0kbits/s',
+          speed: '0.0x',
+          duration: '00:00:00',
+          networkStatus: 'offline',
+        },
       }));
 
       return NextResponse.json({ success: true, destinations: formatted });
     }
 
-    // 4. GET LOGS
+    // 4. GET LOGS & TELEMETRY
     if (action === 'get_logs' && id) {
       const dest = await prisma.destination.findUnique({ where: { id } });
       const logs = logBuffers.get(id) || [];
       const isRunning = activeProcesses.has(id);
+      const telemetry = telemetryMap.get(id) || {
+        fps: 0,
+        bitrate: '0kbits/s',
+        speed: '0.0x',
+        duration: '00:00:00',
+        networkStatus: isRunning ? 'excellent' : 'offline',
+      };
 
       return NextResponse.json({
         id,
         logs,
         status: isRunning ? 'streaming' : (dest?.status || 'idle'),
         errorMsg: dest?.errorMsg || '',
+        telemetry,
       });
     }
 

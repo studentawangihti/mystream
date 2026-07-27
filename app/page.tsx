@@ -1157,7 +1157,7 @@ export default function Dashboard() {
                       <p style={{ margin: '0 0 6px 0' }}>Salin Stream Key permanen akun Anda ke kolom <strong>Stream Key</strong>:</p>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg-input)', border: '1px solid var(--border)', padding: '8px 12px', borderRadius: '8px' }}>
                         <code style={{ flex: 1, fontSize: '0.85rem', color: 'var(--text-terminal)', fontFamily: 'monospace', letterSpacing: showIngestKey ? 'normal' : '0.15em' }}>
-                          {showIngestKey ? ingestKey : '•••••-•••••-•••••-•••••'}
+                          {showIngestKey ? ingestKey : '••••••••••••••••••••'}
                         </code>
                         <button 
                           style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '4px' }}

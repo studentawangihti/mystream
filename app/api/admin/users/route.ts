@@ -178,15 +178,11 @@ export async function POST(req: Request) {
     if (action === 'reset_key') {
       const generateKey = () => {
         const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-        let segments = [];
-        for (let i = 0; i < 4; i++) {
-          let segment = '';
-          for (let j = 0; j < 5; j++) {
-            segment += chars.charAt(Math.floor(Math.random() * chars.length));
-          }
-          segments.push(segment);
+        let key = '';
+        for (let i = 0; i < 20; i++) {
+          key += chars.charAt(Math.floor(Math.random() * chars.length));
         }
-        return segments.join('-');
+        return key;
       };
 
       const newIngestKey = generateKey();

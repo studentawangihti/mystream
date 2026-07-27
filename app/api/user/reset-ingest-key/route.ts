@@ -21,33 +21,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'User tidak ditemukan' }, { status: 404 });
     }
 
-    // Check 24-hour rate limit quota
-    const now = new Date();
-    if (user.lastResetAt) {
-      const hoursDiff = (now.getTime() - new Date(user.lastResetAt).getTime()) / (1000 * 60 * 60);
-      if (hoursDiff < 24) {
-        const hoursRemaining = Math.ceil(24 - hoursDiff);
-        return NextResponse.json({
-          error: `Kuota acak Stream Key telah digunakan hari ini. Anda dapat mengacak key lagi dalam ${hoursRemaining} jam.`,
-          hoursRemaining,
-        }, { status: 429 });
-      }
-    }
-
-    // Generate new unique permanent stream key (format: XXXXX-XXXXX-XXXXX-XXXXX)
     const generateKey = () => {
       const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-      let segments = [];
-      for (let i = 0; i < 4; i++) {
-        let segment = '';
-        for (let j = 0; j < 5; j++) {
-          segment += chars.charAt(Math.floor(Math.random() * chars.length));
-        }
-        segments.push(segment);
+      let key = '';
+      for (let i = 0; i < 20; i++) {
+        key += chars.charAt(Math.floor(Math.random() * chars.length));
       }
-      return segments.join('-');
+      return key;
     };
 
+    const now = new Date();
     const newIngestKey = generateKey();
 
     const updatedUser = await prisma.user.update({

@@ -23,7 +23,7 @@ export async function GET(req: Request) {
     const userPlan = dbUser?.plan || 'free';
 
     const videos = await prisma.video.findMany({
-      where: { userId },
+      where: { userId, deletedAt: null },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -74,7 +74,7 @@ export async function DELETE(req: Request) {
     }
 
     const video = await prisma.video.findFirst({
-      where: { id: videoId, userId },
+      where: { id: videoId, userId, deletedAt: null },
     });
 
     if (!video) {
@@ -91,9 +91,10 @@ export async function DELETE(req: Request) {
       console.warn('Physical file deletion warning (possibly locked):', fsErr);
     }
 
-    // Delete database entry
-    await prisma.video.delete({
+    // Soft delete database entry
+    await prisma.video.update({
       where: { id: videoId },
+      data: { deletedAt: new Date() },
     });
 
     return NextResponse.json({
@@ -105,3 +106,4 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ error: error.message || 'Gagal menghapus video.' }, { status: 500 });
   }
 }
+

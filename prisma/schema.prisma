@@ -18,6 +18,7 @@ model User {
   lastResetAt      DateTime?
   resetToken       String?
   resetTokenExpiry DateTime?
+  deletedAt        DateTime?     // Soft delete timestamp
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
   destinations     Destination[]
@@ -25,27 +26,29 @@ model User {
 }
 
 model Destination {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   name      String
   rtmpUrl   String
   streamKey String
-  status    String   @default("idle")
+  status    String    @default("idle")
   errorMsg  String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  deletedAt DateTime? // Soft delete timestamp
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 }
 
 model Video {
-  id           String   @id @default(uuid())
+  id           String    @id @default(uuid())
   userId       String
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   title        String
   filename     String
   filePath     String
-  sizeBytes    BigInt   @default(0)
-  durationSecs Int      @default(0)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  sizeBytes    BigInt    @default(0)
+  durationSecs Int       @default(0)
+  deletedAt    DateTime? // Soft delete timestamp
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 }

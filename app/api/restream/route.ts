@@ -42,12 +42,12 @@ export async function GET(req: Request) {
 
     // Fetch user destinations from DB
     const destinations = await prisma.destination.findMany({
-      where: { userId },
+      where: { userId, deletedAt: null },
       orderBy: { createdAt: 'asc' },
     });
 
     const dbUser = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { id: userId, deletedAt: null },
       select: { plan: true, ingestKey: true },
     });
 
@@ -99,7 +99,7 @@ export async function POST(req: Request) {
 
     // Refresh latest user plan from DB
     const dbUser = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { id: userId, deletedAt: null },
       select: { plan: true, ingestKey: true },
     });
 
@@ -129,13 +129,16 @@ export async function POST(req: Request) {
       }
 
       // Sync destinations in DB
-      const existingInDb = await prisma.destination.findMany({ where: { userId } });
+      const existingInDb = await prisma.destination.findMany({ where: { userId, deletedAt: null } });
       const incomingIds = incomingDestinations.map((d: any) => d.id).filter((id: string) => id.length > 20); // valid UUIDs
 
-      // Delete removed destinations
+      // Soft-delete removed destinations
       const toDelete = existingInDb.filter((d) => !incomingIds.includes(d.id));
       for (const d of toDelete) {
-        await prisma.destination.delete({ where: { id: d.id } });
+        await prisma.destination.update({
+          where: { id: d.id },
+          data: { deletedAt: new Date() },
+        });
       }
 
       // Upsert incoming destinations
@@ -167,7 +170,7 @@ export async function POST(req: Request) {
       return NextResponse.json({
         success: true,
         message: 'Semua konfigurasi target platform berhasil disimpan ke database!',
-        destinations: savedDestinations,
+        destinations: savedDestinations.filter((d) => d.deletedAt === null),
       });
     }
 
@@ -178,8 +181,9 @@ export async function POST(req: Request) {
       }
 
       const video = await prisma.video.findFirst({
-        where: { id: videoId, userId },
+        where: { id: videoId, userId, deletedAt: null },
       });
+
 
       if (!video) {
         return NextResponse.json({ error: 'File video tidak ditemukan.' }, { status: 404 });

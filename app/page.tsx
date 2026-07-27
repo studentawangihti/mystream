@@ -398,7 +398,7 @@ export default function Dashboard() {
       return;
     }
 
-    if (!confirm('Apakah Anda yakin ingin mengacak Stream Key akun Anda? (Kuota: 1x per 24 jam). Anda harus memperbarui Stream Key di OBS Studio setelah ini.')) {
+    if (!confirm('Apakah Anda yakin ingin mengacak Stream Key akun Anda? Anda harus memperbarui Stream Key di OBS Studio setelah ini.')) {
       return;
     }
 
@@ -1182,7 +1182,7 @@ export default function Dashboard() {
                           disabled={resetKeyLoading || isCurrentlyRestreaming}
                         >
                           {resetKeyLoading ? <RotateCw className="spin" size={13} /> : <RotateCw size={13} />}
-                          <span>Acak Stream Key (1x/24 jam)</span>
+                          <span>Acak Stream Key</span>
                         </button>
                       </div>
                     </div>

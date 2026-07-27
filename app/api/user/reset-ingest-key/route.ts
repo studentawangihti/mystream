@@ -34,8 +34,21 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Generate new unique permanent stream key
-    const newIngestKey = 'awg_live_' + crypto.randomBytes(6).toString('hex');
+    // Generate new unique permanent stream key (format: XXXXX-XXXXX-XXXXX-XXXXX)
+    const generateKey = () => {
+      const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+      let segments = [];
+      for (let i = 0; i < 4; i++) {
+        let segment = '';
+        for (let j = 0; j < 5; j++) {
+          segment += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        segments.push(segment);
+      }
+      return segments.join('-');
+    };
+
+    const newIngestKey = generateKey();
 
     const updatedUser = await prisma.user.update({
       where: { id: userId },

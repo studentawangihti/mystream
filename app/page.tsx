@@ -47,7 +47,8 @@ import {
   Film,
   HardDrive,
   PlayCircle,
-  Eye
+  Eye,
+  EyeOff
 } from 'lucide-react';
 
 interface Telemetry {
@@ -134,6 +135,7 @@ export default function Dashboard() {
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('system');
   const [copiedServer, setCopiedServer] = useState<boolean>(false);
   const [copiedKey, setCopiedKey] = useState<boolean>(false);
+  const [showIngestKey, setShowIngestKey] = useState<boolean>(false);
 
   // Unsaved destination edits ref to prevent 3s polling from wiping out user input
   const isEditingDestinationsRef = useRef<boolean>(false);
@@ -1154,10 +1156,20 @@ export default function Dashboard() {
                     <div style={{ flex: 1, fontSize: '0.88rem', color: 'var(--text-primary)' }}>
                       <p style={{ margin: '0 0 6px 0' }}>Salin Stream Key permanen akun Anda ke kolom <strong>Stream Key</strong>:</p>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg-input)', border: '1px solid var(--border)', padding: '8px 12px', borderRadius: '8px' }}>
-                        <code style={{ flex: 1, fontSize: '0.85rem', color: 'var(--text-terminal)', fontFamily: 'monospace' }}>{ingestKey}</code>
+                        <code style={{ flex: 1, fontSize: '0.85rem', color: 'var(--text-terminal)', fontFamily: 'monospace', letterSpacing: showIngestKey ? 'normal' : '0.15em' }}>
+                          {showIngestKey ? ingestKey : '•••••-•••••-•••••-•••••'}
+                        </code>
+                        <button 
+                          style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '4px' }}
+                          onClick={() => setShowIngestKey(!showIngestKey)}
+                          title={showIngestKey ? "Sembunyikan Stream Key" : "Tampilkan Stream Key"}
+                        >
+                          {showIngestKey ? <EyeOff size={14} /> : <Eye size={14} />}
+                        </button>
                         <button 
                           style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '4px' }}
                           onClick={() => copyToClipboard(ingestKey, 'key')}
+                          title="Salin Stream Key"
                         >
                           {copiedKey ? <Check size={14} color="#10b981" /> : <Copy size={14} />}
                         </button>

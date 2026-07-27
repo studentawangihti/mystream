@@ -28,7 +28,20 @@ export async function POST(req: Request) {
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const ingestKey = `awg_live_${uuidv4().replace(/-/g, '').slice(0, 12)}`;
+    const generateKey = () => {
+      const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+      let segments = [];
+      for (let i = 0; i < 4; i++) {
+        let segment = '';
+        for (let j = 0; j < 5; j++) {
+          segment += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        segments.push(segment);
+      }
+      return segments.join('-');
+    };
+
+    const ingestKey = generateKey();
 
     const user = await prisma.user.create({
       data: {

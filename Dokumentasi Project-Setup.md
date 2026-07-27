@@ -37,7 +37,7 @@ Jika ingin menjalankan lewat terminal CMD / PowerShell secara terpisah:
 
 1. Buka OBS Studio > **Settings** > **Stream**.
 2. **Service**: Pilih `Custom...`
-3. **Server URL**: `rtmp://restream.awgverse.io/live` *(atau `rtmp://127.0.0.1:1935/live` untuk lokal)*.
+3. **Server URL**: `rtmp://restream.awgverse.site/live` *(atau `rtmp://127.0.0.1:1935/live` untuk lokal)*.
 4. **Stream Key**: Masukkan Stream Key Permanen Unik akun Anda (`awg_live_xxxxxx`).
 5. **Output (Pengaturan Video Low Latency)**:
    * **Output Mode**: Advanced > tab **Streaming**.
@@ -88,8 +88,8 @@ Cocok untuk menjalankan proyek dari laptop rumah dengan domain gratis:
    ```
 4. Hubungkan CNAME domain Anda (misal `restream.awgverse.site`) di DNS Cloudflare ke tunnel ini.
 
-### Opsi B: Custom Domain Ingest RTMP (`rtmp://restream.awgverse.io/live`)
-1. Di DNS Management domain Anda (`awgverse.io`), buat **A-Record**:
+### Opsi B: Custom Domain Ingest RTMP (`rtmp://restream.awgverse.site/live`)
+1. Di DNS Management domain Anda (`awgverse.site`), buat **A-Record**:
    * **Name**: `restream`
    * **IPv4**: *(IP Publik Internet Rumah Anda)*
 2. Di Modem/Router Rumah:

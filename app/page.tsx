@@ -819,7 +819,7 @@ export default function Dashboard() {
               </div>
               <div>
                 <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-muted)' }}>Ingest Server:</span>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.7rem', margin: '2px 0 0 0' }}>rtmp://restream.awgverse.io/live</p>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.7rem', margin: '2px 0 0 0' }}>rtmp://restream.awgverse.site/live</p>
               </div>
             </div>
           )}
@@ -1168,10 +1168,10 @@ export default function Dashboard() {
                     <div style={{ flex: 1, fontSize: '0.88rem', color: 'var(--text-primary)' }}>
                       <p style={{ margin: '0 0 6px 0' }}>Salin Server URL berikut ke kolom <strong>Server</strong>:</p>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg-input)', border: '1px solid var(--border)', padding: '8px 12px', borderRadius: '8px' }}>
-                        <code style={{ flex: 1, fontSize: '0.85rem', color: 'var(--text-terminal)', fontFamily: 'monospace' }}>rtmp://restream.awgverse.io/live</code>
+                        <code style={{ flex: 1, fontSize: '0.85rem', color: 'var(--text-terminal)', fontFamily: 'monospace' }}>rtmp://restream.awgverse.site/live</code>
                         <button 
                           style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '4px' }}
-                          onClick={() => copyToClipboard('rtmp://restream.awgverse.io/live', 'server')}
+                          onClick={() => copyToClipboard('rtmp://restream.awgverse.site/live', 'server')}
                         >
                           {copiedServer ? <Check size={14} color="#10b981" /> : <Copy size={14} />}
                         </button>

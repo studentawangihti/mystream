@@ -76,7 +76,7 @@ Penyebaran server penerima sinyal (Ingest Node) MediaMTX ke beberapa lokasi geog
 (Singapore, Jakarta, US East, Frankfurt) untuk meminimalkan ping/latency bagi streamer internasional.
 
 Spesifikasi Teknis:
-- Implementasi Geo-DNS Routing yang mengarahkan `rtmp://restream.awgverse.io/live` ke server Ingest terdekat dari posisi IP streamer.
+- Implementasi Geo-DNS Routing yang mengarahkan `rtmp://restream.awgverse.site/live` ke server Ingest terdekat dari posisi IP streamer.
 - Hubungan RTMP Relay Internal dari Node Edge ke Main Distribution Server.
 
 

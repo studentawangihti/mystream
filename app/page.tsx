@@ -426,6 +426,34 @@ export default function Dashboard() {
     }
   };
 
+  const handleDirectResetStreamKey = async () => {
+    if (!confirm('Apakah Anda yakin ingin mengatur ulang (Reset) Stream Key Anda? Anda harus mengganti Stream Key baru di OBS Studio agar bisa melakukan live kembali.')) {
+      return;
+    }
+    setResetKeyLoading(true);
+    try {
+      const res = await fetch('/api/user/reset-ingest-key', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || 'Gagal mereset Stream Key');
+        return;
+      }
+      if (data.ingestKey) {
+        setIngestKey(data.ingestKey);
+        if (updateSession) {
+          await updateSession({ ingestKey: data.ingestKey, lastResetAt: data.lastResetAt });
+        }
+        setPlayerKey(prev => prev + 1);
+        alert('Stream Key berhasil diperbarui!');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Terjadi kesalahan koneksi saat mereset Stream Key.');
+    } finally {
+      setResetKeyLoading(false);
+    }
+  };
+
   // Switch Plan (Free, Pro, Ultimate)
   const handleSwitchPlan = async (newPlan: 'free' | 'pro' | 'ultimate') => {
     try {
@@ -1175,14 +1203,28 @@ export default function Dashboard() {
                         </button>
                       </div>
 
-                      <div style={{ marginTop: '10px' }}>
+                       <div style={{ marginTop: '10px' }}>
                         <button
-                          style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'var(--text-secondary)', padding: '6px 12px', borderRadius: '8px', fontSize: '0.78rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
-                          onClick={handleRandomizeIngestKey}
-                          disabled={resetKeyLoading || isCurrentlyRestreaming}
+                          style={{ 
+                            background: 'var(--primary)', 
+                            border: 'none', 
+                            color: '#fff', 
+                            padding: '8px 16px', 
+                            borderRadius: '8px', 
+                            fontSize: '0.8rem', 
+                            fontWeight: 600, 
+                            cursor: 'pointer', 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '6px',
+                            opacity: resetKeyLoading ? 0.6 : 1
+                          }}
+                          onClick={handleDirectResetStreamKey}
+                          disabled={resetKeyLoading}
+                          title="Reset Stream Key Baru"
                         >
-                          {resetKeyLoading ? <RotateCw className="spin" size={13} /> : <RotateCw size={13} />}
-                          <span>Acak Stream Key</span>
+                          {resetKeyLoading ? <RotateCw className="spin" size={13} /> : <KeyRound size={13} />}
+                          <span>Reset Stream Key Baru</span>
                         </button>
                       </div>
                     </div>

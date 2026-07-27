@@ -266,6 +266,9 @@ export default function Dashboard() {
           setSelectedDestId(data.destinations[0].id);
         }
       }
+      if (data.ingestKey) {
+        setIngestKey(data.ingestKey);
+      }
       if (data.telemetry) {
         setTelemetry(data.telemetry);
       }

@@ -137,6 +137,14 @@ export default function Dashboard() {
   const [copiedKey, setCopiedKey] = useState<boolean>(false);
   const [showIngestKey, setShowIngestKey] = useState<boolean>(false);
 
+  // Dynamic UI & Settings State
+  const [siteTitle, setSiteTitle] = useState('MyStream Studio');
+  const [logoUrl, setLogoUrl] = useState('');
+  const [primaryColor, setPrimaryColor] = useState('#6366f1');
+  const [ingestUrlSetting, setIngestUrlSetting] = useState('rtmp://restream.awgverse.site/live');
+  const [enableCloudUpload, setEnableCloudUpload] = useState(true);
+  const [enableWebRtcPlayer, setEnableWebRtcPlayer] = useState(true);
+
   // Unsaved destination edits ref to prevent 3s polling from wiping out user input
   const isEditingDestinationsRef = useRef<boolean>(false);
 
@@ -254,13 +262,15 @@ export default function Dashboard() {
   const fetchData = async () => {
     if (sessionStatus !== 'authenticated') return;
     try {
-      const [restreamRes, videosRes] = await Promise.all([
+      const [restreamRes, videosRes, settingsRes] = await Promise.all([
         fetch('/api/restream'),
         fetch('/api/video/list'),
+        fetch('/api/settings'),
       ]);
 
       const data = await restreamRes.json();
       const videoData = await videosRes.json();
+      const settingsData = await settingsRes.json();
 
       if (data.destinations && !isEditingDestinationsRef.current) {
         setDestinations(data.destinations);
@@ -283,6 +293,23 @@ export default function Dashboard() {
       if (videoData.storage) {
         setStorageMetrics(videoData.storage);
       }
+
+      if (settingsData.settings) {
+        const s = settingsData.settings;
+        if (s.siteTitle) {
+          setSiteTitle(s.siteTitle);
+          document.title = `${s.siteTitle} - Broadcast Studio`;
+        }
+        if (s.logoUrl !== undefined) setLogoUrl(s.logoUrl);
+        if (s.primaryColor) {
+          setPrimaryColor(s.primaryColor);
+          document.documentElement.style.setProperty('--primary', s.primaryColor);
+        }
+        if (s.ingestUrl) setIngestUrlSetting(s.ingestUrl);
+        if (s.enableCloudUpload !== undefined) setEnableCloudUpload(s.enableCloudUpload === 'true');
+        if (s.enableWebRtcPlayer !== undefined) setEnableWebRtcPlayer(s.enableWebRtcPlayer === 'true');
+      }
+
       setLoading(false);
     } catch (err) {
       console.error('Failed to fetch stream data:', err);
@@ -641,13 +668,22 @@ export default function Dashboard() {
 
   return (
     <div className="app-container">
+      <style dangerouslySetInnerHTML={{ __html: `
+        :root {
+          --primary: ${primaryColor} !important;
+        }
+      ` }} />
       {/* Auto-Hiding Top Header */}
       <header className={`app-header ${!showHeader ? 'header-hidden' : ''}`}>
         <div className="logo-section">
-          <div className="logo-icon-wrapper">
-            <Radio size={20} color="#ffffff" />
-          </div>
-          <span className="logo-title">MyStream Studio</span>
+          {logoUrl ? (
+            <img src={logoUrl} alt="Logo" style={{ height: '24px', objectFit: 'contain', borderRadius: '4px' }} />
+          ) : (
+            <div className="logo-icon-wrapper">
+              <Radio size={20} color="#ffffff" />
+            </div>
+          )}
+          <span className="logo-title">{siteTitle}</span>
           <span className="logo-badge">BROADCAST ENGINE</span>
         </div>
 
@@ -954,7 +990,8 @@ export default function Dashboard() {
           </div>
 
           {/* ☁️ Cloud Restreaming (Tanpa OBS) Section */}
-          <div className="card">
+          {enableCloudUpload && (
+            <div className="card">
             <div className="card-header" style={{ flexWrap: 'wrap', gap: '12px' }}>
               <div className="card-title">
                 <Film size={18} color="var(--primary)" />
@@ -1107,6 +1144,7 @@ export default function Dashboard() {
               )}
             </div>
           </div>
+          )}
 
           {/* 2-Column Dashboard Grid */}
           <div className="dashboard-grid">
@@ -1132,17 +1170,27 @@ export default function Dashboard() {
                 </div>
 
                 <div className="video-wrapper">
-                  <iframe
-                    key={playerKey}
-                    src={`http://localhost:8889/live/${ingestKey}`}
-                    style={{ width: '100%', height: '100%', border: 'none' }}
-                    allow="autoplay; fullscreen"
-                    title="Live WebRTC Preview Player"
-                  />
-                  <div className="video-overlay-badge">
-                    <span className="pulse-dot" style={{ backgroundColor: '#10b981' }}></span>
-                    <span>WHEP WebRTC (&lt;0.5s)</span>
-                  </div>
+                  {enableWebRtcPlayer ? (
+                    <>
+                      <iframe
+                        key={playerKey}
+                        src={`http://localhost:8889/live/${ingestKey}`}
+                        style={{ width: '100%', height: '100%', border: 'none' }}
+                        allow="autoplay; fullscreen"
+                        title="Live WebRTC Preview Player"
+                      />
+                      <div className="video-overlay-badge">
+                        <span className="pulse-dot" style={{ backgroundColor: '#10b981' }}></span>
+                        <span>WHEP WebRTC (&lt;0.5s)</span>
+                      </div>
+                    </>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: '220px', color: 'var(--text-secondary)', gap: '10px', background: 'rgba(0,0,0,0.1)' }}>
+                      <Radio size={36} style={{ opacity: 0.4 }} />
+                      <p style={{ margin: 0, fontWeight: 700, fontSize: '0.85rem' }}>Live Preview Player Dinonaktifkan</p>
+                      <p style={{ margin: 0, fontSize: '0.75rem', opacity: 0.6 }}>Fitur WebRTC dinonaktifkan oleh administrator.</p>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1168,10 +1216,10 @@ export default function Dashboard() {
                     <div style={{ flex: 1, fontSize: '0.88rem', color: 'var(--text-primary)' }}>
                       <p style={{ margin: '0 0 6px 0' }}>Salin Server URL berikut ke kolom <strong>Server</strong>:</p>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg-input)', border: '1px solid var(--border)', padding: '8px 12px', borderRadius: '8px' }}>
-                        <code style={{ flex: 1, fontSize: '0.85rem', color: 'var(--text-terminal)', fontFamily: 'monospace' }}>rtmp://restream.awgverse.site/live</code>
+                        <code style={{ flex: 1, fontSize: '0.85rem', color: 'var(--text-terminal)', fontFamily: 'monospace' }}>{ingestUrlSetting}</code>
                         <button 
                           style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '4px' }}
-                          onClick={() => copyToClipboard('rtmp://restream.awgverse.site/live', 'server')}
+                          onClick={() => copyToClipboard(ingestUrlSetting, 'server')}
                         >
                           {copiedServer ? <Check size={14} color="#10b981" /> : <Copy size={14} />}
                         </button>

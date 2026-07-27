@@ -36,7 +36,9 @@ import {
   FileCode,
   Layers,
   HelpCircle,
-  Clock
+  Clock,
+  Settings,
+  Save
 } from 'lucide-react';
 
 interface VideoRecord {
@@ -94,12 +96,21 @@ export default function AdminDashboard() {
 
   const [loading, setLoading] = useState(true);
   const [backupLoading, setBackupLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'users' | 'database' | 'traffic'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'database' | 'traffic' | 'settings'>('users');
   const [searchQuery, setSearchQuery] = useState('');
   const [planFilter, setPlanFilter] = useState<string>('all');
   const [showRecycleBin, setShowRecycleBin] = useState<boolean>(false);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [notification, setNotification] = useState<string | null>(null);
+
+  // System Settings State
+  const [siteTitle, setSiteTitle] = useState('MyStream Studio');
+  const [logoUrl, setLogoUrl] = useState('');
+  const [primaryColor, setPrimaryColor] = useState('#6366f1');
+  const [ingestUrl, setIngestUrl] = useState('rtmp://restream.awgverse.site/live');
+  const [enableCloudUpload, setEnableCloudUpload] = useState(true);
+  const [enableWebRtcPlayer, setEnableWebRtcPlayer] = useState(true);
+  const [settingsSaving, setSettingsSaving] = useState(false);
 
   // Change Password Modal state for Admin override
   const [passModalUser, setPassModalUser] = useState<UserData | null>(null);
@@ -121,24 +132,68 @@ export default function AdminDashboard() {
 
   const fetchAdminData = async () => {
     try {
-      const [usersRes, trafficRes, backupRes] = await Promise.all([
+      const [usersRes, trafficRes, backupRes, settingsRes] = await Promise.all([
         fetch(`/api/admin/users?includeDeleted=${showRecycleBin ? 'true' : 'false'}`),
         fetch('/api/admin/traffic'),
         fetch('/api/admin/backup'),
+        fetch('/api/admin/settings'),
       ]);
 
       const usersData = await usersRes.json();
       const trafficData = await trafficRes.json();
       const backupData = await backupRes.json();
+      const settingsData = await settingsRes.json();
 
       if (usersData.users) setUsers(usersData.users);
       if (trafficData.traffic) setTraffic(trafficData.traffic);
       if (backupData.backups) setBackups(backupData.backups);
       if (backupData.dbStats) setDbStats(backupData.dbStats);
+      if (settingsData.settings) {
+        const s = settingsData.settings;
+        if (s.siteTitle !== undefined) setSiteTitle(s.siteTitle);
+        if (s.logoUrl !== undefined) setLogoUrl(s.logoUrl);
+        if (s.primaryColor !== undefined) setPrimaryColor(s.primaryColor);
+        if (s.ingestUrl !== undefined) setIngestUrl(s.ingestUrl);
+        if (s.enableCloudUpload !== undefined) setEnableCloudUpload(s.enableCloudUpload === 'true');
+        if (s.enableWebRtcPlayer !== undefined) setEnableWebRtcPlayer(s.enableWebRtcPlayer === 'true');
+      }
     } catch (err) {
       console.error('Failed to fetch admin data:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSettingsSaving(true);
+    try {
+      const res = await fetch('/api/admin/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          settings: {
+            siteTitle,
+            logoUrl,
+            primaryColor,
+            ingestUrl,
+            enableCloudUpload: String(enableCloudUpload),
+            enableWebRtcPlayer: String(enableWebRtcPlayer),
+          }
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || 'Gagal menyimpan pengaturan.');
+      } else {
+        setNotification('Pengaturan sistem berhasil disimpan!');
+        setTimeout(() => setNotification(null), 3500);
+      }
+    } catch (err) {
+      alert('Terjadi kesalahan koneksi saat menyimpan.');
+    } finally {
+      setSettingsSaving(false);
     }
   };
 
@@ -383,6 +438,11 @@ export default function AdminDashboard() {
 
   return (
     <div className="app-container">
+      <style dangerouslySetInnerHTML={{ __html: `
+        :root {
+          --primary: ${primaryColor} !important;
+        }
+      ` }} />
       {/* Admin Header */}
       <header className="app-header">
         <div className="logo-section">
@@ -497,6 +557,14 @@ export default function AdminDashboard() {
           >
             <BarChart3 size={16} />
             <span>System Traffic & Engine Stats</span>
+          </button>
+
+          <button
+            style={{ background: activeTab === 'settings' ? 'var(--primary)' : 'transparent', color: activeTab === 'settings' ? '#fff' : 'var(--text-secondary)', border: 'none', padding: '10px 18px', borderRadius: '10px', fontWeight: 700, fontSize: '0.88rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
+            onClick={() => setActiveTab('settings')}
+          >
+            <Settings size={16} />
+            <span>UI & Branding Settings</span>
           </button>
         </div>
 
@@ -827,6 +895,120 @@ export default function AdminDashboard() {
                 <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: '4px 0 0 0' }}>Multi-platform distribution</p>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* TAB 4: UI & Branding Settings */}
+        {activeTab === 'settings' && (
+          <div className="card">
+            <div className="card-header">
+              <div className="card-title">
+                <Settings size={18} color="var(--primary)" />
+                <span>Kustomisasi Tampilan & Pengaturan Global Pengguna</span>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveSettings} style={{ display: 'flex', flexDirection: 'column', gap: '20px', padding: '10px 0' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
+                <div className="form-group">
+                  <label className="form-label" style={{ display: 'block', marginBottom: '8px', fontWeight: 700, fontSize: '0.75rem', color: 'var(--text-muted)' }}>NAMA APLIKASI (SITE TITLE)</label>
+                  <input
+                    type="text"
+                    required
+                    className="input-text"
+                    value={siteTitle}
+                    onChange={(e) => setSiteTitle(e.target.value)}
+                    placeholder="Contoh: MyStream Studio"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" style={{ display: 'block', marginBottom: '8px', fontWeight: 700, fontSize: '0.75rem', color: 'var(--text-muted)' }}>URL LOGO KUSTOM (KOSONGKAN UNTUK DEFAULT)</label>
+                  <input
+                    type="text"
+                    className="input-text"
+                    value={logoUrl}
+                    onChange={(e) => setLogoUrl(e.target.value)}
+                    placeholder="Contoh: https://domain.com/logo.png"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" style={{ display: 'block', marginBottom: '8px', fontWeight: 700, fontSize: '0.75rem', color: 'var(--text-muted)' }}>WARNA PRIMER UI (PRIMARY ACCENT COLOR)</label>
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                    <input
+                      type="color"
+                      value={primaryColor}
+                      onChange={(e) => setPrimaryColor(e.target.value)}
+                      style={{ width: '40px', height: '40px', border: '1px solid var(--border)', borderRadius: '8px', padding: '0', background: 'transparent', cursor: 'pointer' }}
+                    />
+                    <input
+                      type="text"
+                      className="input-text"
+                      value={primaryColor}
+                      onChange={(e) => setPrimaryColor(e.target.value)}
+                      style={{ flex: 1 }}
+                      placeholder="#6366f1"
+                    />
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" style={{ display: 'block', marginBottom: '8px', fontWeight: 700, fontSize: '0.75rem', color: 'var(--text-muted)' }}>ALAMAT INGEST SERVER RTMP UNTUK OBS</label>
+                  <input
+                    type="text"
+                    required
+                    className="input-text"
+                    value={ingestUrl}
+                    onChange={(e) => setIngestUrl(e.target.value)}
+                    placeholder="rtmp://restream.awgverse.site/live"
+                  />
+                </div>
+              </div>
+
+              <div style={{ borderTop: '1px solid var(--border)', paddingTop: '20px', marginTop: '10px' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)', display: 'block', marginBottom: '14px', letterSpacing: '0.05em' }}>FITUR AKTIF PENGGUNA (FEATURE TOGGLES)</span>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={enableCloudUpload}
+                      onChange={(e) => setEnableCloudUpload(e.target.checked)}
+                      style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: 'var(--primary)' }}
+                    />
+                    <div>
+                      <span style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--text-primary)', display: 'block' }}>Aktifkan Fitur Unggah Video Cloud MP4</span>
+                      <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Mengizinkan pengguna mengunggah video ke cloud dan melakukan siaran 24/7 tanpa OBS.</span>
+                    </div>
+                  </label>
+
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={enableWebRtcPlayer}
+                      onChange={(e) => setEnableWebRtcPlayer(e.target.checked)}
+                      style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: 'var(--primary)' }}
+                    />
+                    <div>
+                      <span style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--text-primary)', display: 'block' }}>Aktifkan Live Monitor Feed (WHEP WebRTC Player)</span>
+                      <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Menampilkan jendela preview player WebRTC bersuara di dashboard utama pengguna.</span>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px' }}>
+                <button
+                  type="submit"
+                  disabled={settingsSaving}
+                  style={{ background: 'var(--primary)', border: 'none', color: '#fff', padding: '12px 24px', borderRadius: '10px', fontSize: '0.88rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 12px rgba(99,102,241,0.25)', opacity: settingsSaving ? 0.7 : 1 }}
+                >
+                  {settingsSaving ? <RotateCw className="spin" size={16} /> : <Save size={16} />}
+                  <span>Simpan Pengaturan Kustomisasi</span>
+                </button>
+              </div>
+            </form>
           </div>
         )}
 

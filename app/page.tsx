@@ -146,6 +146,29 @@ export default function Dashboard() {
   const [enableWebRtcPlayer, setEnableWebRtcPlayer] = useState(true);
   const [plans, setPlans] = useState<any>(null);
 
+  // Custom Alert & Confirm state
+  const [alertModal, setAlertModal] = useState<{ isOpen: boolean; message: string } | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean; message: string; onConfirm: () => void; onCancel?: () => void } | null>(null);
+
+  const showAlert = (msg: string) => {
+    setAlertModal({ isOpen: true, message: msg });
+  };
+
+  const showConfirm = (msg: string, onConfirm: () => void, onCancel?: () => void) => {
+    setConfirmModal({
+      isOpen: true,
+      message: msg,
+      onConfirm: () => {
+        onConfirm();
+        setConfirmModal(null);
+      },
+      onCancel: () => {
+        if (onCancel) onCancel();
+        setConfirmModal(null);
+      }
+    });
+  };
+
   // Unsaved destination edits ref to prevent 3s polling from wiping out user input
   const isEditingDestinationsRef = useRef<boolean>(false);
 
@@ -374,27 +397,27 @@ export default function Dashboard() {
 
   // Delete Uploaded MP4 Video
   const handleDeleteVideo = async (videoId: string, title: string) => {
-    if (!confirm(`Apakah Anda yakin ingin menghapus video "${title}" dari Cloud Library? Sisa kapasitas penyimpanan Anda akan dikembalikan.`)) return;
+    showConfirm(`Apakah Anda yakin ingin menghapus video "${title}" dari Cloud Library? Sisa kapasitas penyimpanan Anda akan dikembalikan.`, async () => {
+      try {
+        const res = await fetch('/api/video/list', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ videoId }),
+        });
 
-    try {
-      const res = await fetch('/api/video/list', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ videoId }),
-      });
+        const data = await res.json();
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        alert(data.error || 'Gagal menghapus video.');
-      } else {
-        alert(data.message);
-        setUserVideos((prev) => prev.filter((v) => v.id !== videoId));
-        fetchData();
+        if (!res.ok) {
+          showAlert(data.error || 'Gagal menghapus video.');
+        } else {
+          showAlert(data.message);
+          setUserVideos((prev) => prev.filter((v) => v.id !== videoId));
+          fetchData();
+        }
+      } catch (err) {
+        showAlert('Terjadi kesalahan saat menghapus video.');
       }
-    } catch (err) {
-      alert('Terjadi kesalahan saat menghapus video.');
-    }
+    });
   };
 
   // Start Cloud Restreaming (Without OBS)
@@ -409,14 +432,14 @@ export default function Dashboard() {
 
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error || 'Gagal memulai Cloud Restream.');
+        showAlert(data.error || 'Gagal memulai Cloud Restream.');
       } else {
-        alert(data.message);
+        showAlert(data.message);
         setPlayerKey((prev) => prev + 1);
         fetchData();
       }
     } catch (err) {
-      alert('Terjadi kesalahan koneksi.');
+      showAlert('Terjadi kesalahan koneksi.');
     } finally {
       setCloudRestreamLoadingId(null);
     }
@@ -425,64 +448,61 @@ export default function Dashboard() {
   // Handle Stream Key Reset
   const handleRandomizeIngestKey = async () => {
     if (telemetry.status === 'broadcasting') {
-      alert('Tidak dapat mengacak Stream Key saat siaran live sedang aktif.');
+      showAlert('Tidak dapat mengacak Stream Key saat siaran live sedang aktif.');
       return;
     }
 
-    if (!confirm('Apakah Anda yakin ingin mengacak Stream Key akun Anda? Anda harus memperbarui Stream Key di OBS Studio setelah ini.')) {
-      return;
-    }
+    showConfirm('Apakah Anda yakin ingin mengacak Stream Key akun Anda? Anda harus memperbarui Stream Key di OBS Studio setelah ini.', async () => {
+      setResetKeyLoading(true);
+      try {
+        const res = await fetch('/api/user/reset-ingest-key', { method: 'POST' });
+        const data = await res.json();
 
-    setResetKeyLoading(true);
-    try {
-      const res = await fetch('/api/user/reset-ingest-key', { method: 'POST' });
-      const data = await res.json();
+        if (!res.ok) {
+          showAlert(data.error || 'Gagal mereset Stream Key');
+          return;
+        }
 
-      if (!res.ok) {
-        alert(data.error || 'Gagal mereset Stream Key');
-        return;
+        if (data.ingestKey) {
+          setIngestKey(data.ingestKey);
+          await updateSession({ ingestKey: data.ingestKey, lastResetAt: data.lastResetAt });
+          setPlayerKey(prev => prev + 1);
+          showAlert(data.message);
+        }
+      } catch (err) {
+        console.error('Reset Ingest Key error:', err);
+        showAlert('Terjadi kesalahan saat mengacak Stream Key');
+      } finally {
+        setResetKeyLoading(false);
       }
-
-      if (data.ingestKey) {
-        setIngestKey(data.ingestKey);
-        await updateSession({ ingestKey: data.ingestKey, lastResetAt: data.lastResetAt });
-        setPlayerKey(prev => prev + 1);
-        alert(data.message);
-      }
-    } catch (err) {
-      console.error('Reset Ingest Key error:', err);
-      alert('Terjadi kesalahan saat mengacak Stream Key');
-    } finally {
-      setResetKeyLoading(false);
-    }
+    });
   };
 
   const handleDirectResetStreamKey = async () => {
-    if (!confirm('Apakah Anda yakin ingin mengatur ulang (Reset) Stream Key Anda? Anda harus mengganti Stream Key baru di OBS Studio agar bisa melakukan live kembali.')) {
-      return;
-    }
-    setResetKeyLoading(true);
-    try {
-      const res = await fetch('/api/user/reset-ingest-key', { method: 'POST' });
-      const data = await res.json();
-      if (!res.ok) {
-        alert(data.error || 'Gagal mereset Stream Key');
-        return;
-      }
-      if (data.ingestKey) {
-        setIngestKey(data.ingestKey);
-        if (updateSession) {
-          await updateSession({ ingestKey: data.ingestKey, lastResetAt: data.lastResetAt });
+    showConfirm('Apakah Anda yakin ingin mengatur ulang (Reset) Stream Key Anda? Anda harus mengganti Stream Key baru di OBS Studio agar bisa melakukan live kembali.', async () => {
+      setResetKeyLoading(true);
+      try {
+        const res = await fetch('/api/user/reset-ingest-key', { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) {
+          showAlert(data.error || 'Gagal mereset Stream Key');
+          return;
         }
-        setPlayerKey(prev => prev + 1);
-        alert('Stream Key berhasil diperbarui!');
+        if (data.ingestKey) {
+          setIngestKey(data.ingestKey);
+          if (updateSession) {
+            await updateSession({ ingestKey: data.ingestKey, lastResetAt: data.lastResetAt });
+          }
+          setPlayerKey(prev => prev + 1);
+          showAlert('Stream Key berhasil diperbarui!');
+        }
+      } catch (err) {
+        console.error(err);
+        showAlert('Terjadi kesalahan koneksi saat mereset Stream Key.');
+      } finally {
+        setResetKeyLoading(false);
       }
-    } catch (err) {
-      console.error(err);
-      alert('Terjadi kesalahan koneksi saat mereset Stream Key.');
-    } finally {
-      setResetKeyLoading(false);
-    }
+    });
   };
 
   // Switch Plan (Free, Pro, Ultimate)
@@ -496,17 +516,17 @@ export default function Dashboard() {
       const data = await res.json();
 
       if (!res.ok) {
-        alert(data.error || 'Gagal merubah plan membership');
+        showAlert(data.error || 'Gagal merubah plan membership');
         return;
       }
 
       await updateSession({ plan: newPlan });
       fetchData();
       setIsPlanModalOpen(false);
-      alert(`Selamat! Akun Anda kini berstatus ${newPlan.toUpperCase()}!`);
+      showAlert(`Selamat! Akun Anda kini berstatus ${newPlan.toUpperCase()}!`);
     } catch (err) {
       console.error('Switch plan error:', err);
-      alert('Terjadi kesalahan saat merubah plan');
+      showAlert('Terjadi kesalahan saat merubah plan');
     }
   };
 
@@ -550,7 +570,7 @@ export default function Dashboard() {
     const maxPlatforms = currentPlan === 'ultimate' ? 8 : currentPlan === 'pro' ? 4 : 2;
 
     if (destinations.length >= maxPlatforms) {
-      alert(`Plan Anda (${currentPlan.toUpperCase()}) dibatasi maksimal ${maxPlatforms} platform target. Silakan upgrade plan Anda untuk menambah lebih banyak platform!`);
+      showAlert(`Plan Anda (${currentPlan.toUpperCase()}) dibatasi maksimal ${maxPlatforms} platform target. Silakan upgrade plan Anda untuk menambah lebih banyak platform!`);
       setIsPlanModalOpen(true);
       return;
     }
@@ -572,7 +592,7 @@ export default function Dashboard() {
   // Remove Target Platform
   const handleRemoveDestination = (id: string) => {
     if (destinations.length <= 1) {
-      alert('Minimal harus ada 1 platform tujuan.');
+      showAlert('Minimal harus ada 1 platform tujuan.');
       return;
     }
     isEditingDestinationsRef.current = true;
@@ -592,16 +612,16 @@ export default function Dashboard() {
       const data = await res.json();
 
       if (!res.ok) {
-        alert(data.error || 'Gagal menyimpan target platform.');
+        showAlert(data.error || 'Gagal menyimpan target platform.');
       } else {
-        alert(data.message);
+        showAlert(data.message);
         if (data.destinations) {
           setDestinations(data.destinations);
         }
         isEditingDestinationsRef.current = false;
       }
     } catch (err) {
-      alert('Terjadi kesalahan koneksi.');
+      showAlert('Terjadi kesalahan koneksi.');
     } finally {
       setSavingDestinations(false);
     }
@@ -611,35 +631,38 @@ export default function Dashboard() {
   const handleToggleRestream = async () => {
     const isRunning = telemetry.status === 'broadcasting';
     
-    if (!isRunning) {
-      const confirmStart = confirm('Apakah Anda yakin ingin mulai melakukan restreaming ke semua platform target?');
-      if (!confirmStart) return;
-    }
+    const triggerRestreamCall = async () => {
+      const action = isRunning ? 'stop_all' : 'start_all';
+      setActionLoading(true);
+      try {
+        const res = await fetch('/api/restream', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action }),
+        });
+        const data = await res.json();
 
-    const action = isRunning ? 'stop_all' : 'start_all';
-    setActionLoading(true);
-    try {
-      const res = await fetch('/api/restream', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action }),
-      });
-      const data = await res.json();
-
-      if (!res.ok) {
-        alert(data.error || 'Gagal menjalankan aksi restream.');
-        if (data.error?.includes('dibatasi')) {
-          setIsPlanModalOpen(true);
+        if (!res.ok) {
+          showAlert(data.error || 'Gagal menjalankan aksi restream.');
+          if (data.error?.includes('dibatasi')) {
+            setIsPlanModalOpen(true);
+          }
+        } else {
+          showAlert(data.message);
+          fetchData();
         }
-      } else {
-        alert(data.message);
-        fetchData();
+      } catch (err) {
+        console.error('Toggle restream error:', err);
+        showAlert('Terjadi kesalahan saat memproses permintaan restream.');
+      } finally {
+        setActionLoading(false);
       }
-    } catch (err) {
-      console.error('Toggle restream error:', err);
-      alert('Terjadi kesalahan saat memproses permintaan restream.');
-    } finally {
-      setActionLoading(false);
+    };
+
+    if (!isRunning) {
+      showConfirm('Apakah Anda yakin ingin mulai melakukan restreaming ke semua platform target?', triggerRestreamCall);
+    } else {
+      triggerRestreamCall();
     }
   };
 
@@ -1048,7 +1071,7 @@ export default function Dashboard() {
                       if (e.target.files && e.target.files[0]) {
                         const file = e.target.files[0];
                         if (!file.name.toLowerCase().endsWith('.mp4')) {
-                          alert('Hanya file video ber-ekstensi .MP4 yang diizinkan!');
+                          showAlert('Hanya file video ber-ekstensi .MP4 yang diizinkan!');
                           e.target.value = '';
                           setSelectedVideoFile(null);
                           return;
@@ -1658,6 +1681,60 @@ export default function Dashboard() {
                   )}
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Alert Modal */}
+      {alertModal && alertModal.isOpen && (
+        <div className="modal-backdrop" style={{ zIndex: 1000 }}>
+          <div className="plan-modal-card" style={{ maxWidth: '400px', textAlign: 'center', padding: '24px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', alignItems: 'center' }}>
+              <div style={{ background: 'var(--bg-terminal)', padding: '12px', borderRadius: '50%', color: 'var(--primary)' }}>
+                <HelpCircle size={28} />
+              </div>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>Pemberitahuan</h3>
+              <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
+                {alertModal.message}
+              </p>
+              <button 
+                onClick={() => setAlertModal(null)}
+                style={{ width: '100%', background: 'var(--primary)', color: '#fff', border: 'none', padding: '10px', borderRadius: 'var(--radius-md)', fontWeight: 600, cursor: 'pointer', marginTop: '8px' }}
+              >
+                Mengerti
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Confirm Modal */}
+      {confirmModal && confirmModal.isOpen && (
+        <div className="modal-backdrop" style={{ zIndex: 1000 }}>
+          <div className="plan-modal-card" style={{ maxWidth: '420px', textAlign: 'center', padding: '24px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', alignItems: 'center' }}>
+              <div style={{ background: 'var(--bg-terminal)', padding: '12px', borderRadius: '50%', color: 'var(--status-warning)' }}>
+                <AlertTriangle size={28} />
+              </div>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>Konfirmasi Aksi</h3>
+              <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
+                {confirmModal.message}
+              </p>
+              <div style={{ display: 'flex', gap: '10px', width: '100%', marginTop: '8px' }}>
+                <button 
+                  onClick={confirmModal.onCancel}
+                  style={{ flex: 1, background: 'var(--bg-terminal)', color: 'var(--text-primary)', border: '1px solid var(--border)', padding: '10px', borderRadius: 'var(--radius-md)', fontWeight: 600, cursor: 'pointer' }}
+                >
+                  Batal
+                </button>
+                <button 
+                  onClick={confirmModal.onConfirm}
+                  style={{ flex: 1, background: 'var(--primary)', color: '#fff', border: 'none', padding: '10px', borderRadius: 'var(--radius-md)', fontWeight: 600, cursor: 'pointer' }}
+                >
+                  Ya, Lanjutkan
+                </button>
+              </div>
             </div>
           </div>
         </div>

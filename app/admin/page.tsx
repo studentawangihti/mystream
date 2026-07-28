@@ -24,6 +24,7 @@ import {
   Sliders,
   CheckCircle,
   AlertCircle,
+  AlertTriangle,
   HardDrive,
   Database,
   Download,
@@ -139,6 +140,29 @@ export default function AdminDashboard() {
   const [newAdminPasswordInput, setNewAdminPasswordInput] = useState('');
   const [passLoading, setPassLoading] = useState(false);
 
+  // Custom Alert & Confirm state
+  const [alertModal, setAlertModal] = useState<{ isOpen: boolean; message: string } | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean; message: string; onConfirm: () => void; onCancel?: () => void } | null>(null);
+
+  const showAlert = (msg: string) => {
+    setAlertModal({ isOpen: true, message: msg });
+  };
+
+  const showConfirm = (msg: string, onConfirm: () => void, onCancel?: () => void) => {
+    setConfirmModal({
+      isOpen: true,
+      message: msg,
+      onConfirm: () => {
+        onConfirm();
+        setConfirmModal(null);
+      },
+      onCancel: () => {
+        if (onCancel) onCancel();
+        setConfirmModal(null);
+      }
+    });
+  };
+
   // Redirect if unauthenticated or not an admin
   useEffect(() => {
     if (sessionStatus === 'unauthenticated') {
@@ -146,8 +170,10 @@ export default function AdminDashboard() {
     } else if (sessionStatus === 'authenticated') {
       const role = (session?.user as any)?.role;
       if (role !== 'admin') {
-        alert('Akses khusus Super Admin!');
-        router.push('/');
+        showAlert('Akses khusus Super Admin!');
+        setTimeout(() => {
+          router.push('/');
+        }, 2500);
       }
     }
   }, [sessionStatus, session, router]);
@@ -247,13 +273,13 @@ export default function AdminDashboard() {
 
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error || 'Gagal menyimpan pengaturan.');
+        showAlert(data.error || 'Gagal menyimpan pengaturan.');
       } else {
         setNotification('Pengaturan sistem berhasil disimpan!');
         setTimeout(() => setNotification(null), 3500);
       }
     } catch (err) {
-      alert('Terjadi kesalahan koneksi saat menyimpan.');
+      showAlert('Terjadi kesalahan koneksi saat menyimpan.');
     } finally {
       setSettingsSaving(false);
     }
@@ -279,14 +305,14 @@ export default function AdminDashboard() {
 
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error || 'Gagal mengubah plan.');
+        showAlert(data.error || 'Gagal mengubah plan.');
       } else {
         setNotification(data.message);
         setTimeout(() => setNotification(null), 3500);
         fetchAdminData();
       }
     } catch (err) {
-      alert('Terjadi kesalahan koneksi.');
+      showAlert('Terjadi kesalahan koneksi.');
     } finally {
       setActionLoadingId(null);
     }
@@ -304,14 +330,14 @@ export default function AdminDashboard() {
 
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error || 'Gagal mengubah role.');
+        showAlert(data.error || 'Gagal mengubah role.');
       } else {
         setNotification(data.message);
         setTimeout(() => setNotification(null), 3500);
         fetchAdminData();
       }
     } catch (err) {
-      alert('Terjadi kesalahan koneksi.');
+      showAlert('Terjadi kesalahan koneksi.');
     } finally {
       setActionLoadingId(null);
     }
@@ -319,29 +345,29 @@ export default function AdminDashboard() {
 
   // Handle Soft-Delete User
   const handleSoftDeleteUser = async (userId: string, email: string) => {
-    if (!confirm(`Apakah Anda yakin ingin men-Soft Delete akun "${email}"? Akun akan dipindahkan ke Recycle Bin.`)) return;
+    showConfirm(`Apakah Anda yakin ingin men-Soft Delete akun "${email}"? Akun akan dipindahkan ke Recycle Bin.`, async () => {
+      setActionLoadingId(userId);
+      try {
+        const res = await fetch('/api/admin/users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'soft_delete', userId }),
+        });
 
-    setActionLoadingId(userId);
-    try {
-      const res = await fetch('/api/admin/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'soft_delete', userId }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        alert(data.error || 'Gagal men-soft delete user.');
-      } else {
-        setNotification(data.message);
-        setTimeout(() => setNotification(null), 3500);
-        fetchAdminData();
+        const data = await res.json();
+        if (!res.ok) {
+          showAlert(data.error || 'Gagal men-soft delete user.');
+        } else {
+          setNotification(data.message);
+          setTimeout(() => setNotification(null), 3500);
+          fetchAdminData();
+        }
+      } catch (err) {
+        showAlert('Terjadi kesalahan koneksi.');
+      } finally {
+        setActionLoadingId(null);
       }
-    } catch (err) {
-      alert('Terjadi kesalahan koneksi.');
-    } finally {
-      setActionLoadingId(null);
-    }
+    });
   };
 
   // Handle Restore Soft-Deleted User
@@ -356,14 +382,14 @@ export default function AdminDashboard() {
 
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error || 'Gagal memulihkan user.');
+        showAlert(data.error || 'Gagal memulihkan user.');
       } else {
         setNotification(data.message);
         setTimeout(() => setNotification(null), 3500);
         fetchAdminData();
       }
     } catch (err) {
-      alert('Terjadi kesalahan koneksi.');
+      showAlert('Terjadi kesalahan koneksi.');
     } finally {
       setActionLoadingId(null);
     }
@@ -371,29 +397,29 @@ export default function AdminDashboard() {
 
   // Handle Hard Delete User
   const handleHardDeleteUser = async (userId: string, email: string) => {
-    if (!confirm(`⚠️ PERINGATAN: Apakah Anda yakin ingin MENGHAPUS PERMANEN akun "${email}" dari database? Data tidak akan dapat dikembalikan!`)) return;
+    showConfirm(`⚠️ PERINGATAN: Apakah Anda yakin ingin MENGHAPUS PERMANEN akun "${email}" dari database? Data tidak akan dapat dikembalikan!`, async () => {
+      setActionLoadingId(userId);
+      try {
+        const res = await fetch('/api/admin/users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'hard_delete', userId }),
+        });
 
-    setActionLoadingId(userId);
-    try {
-      const res = await fetch('/api/admin/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'hard_delete', userId }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        alert(data.error || 'Gagal menghapus user permanen.');
-      } else {
-        setNotification(data.message);
-        setTimeout(() => setNotification(null), 3500);
-        fetchAdminData();
+        const data = await res.json();
+        if (!res.ok) {
+          showAlert(data.error || 'Gagal menghapus user permanen.');
+        } else {
+          setNotification(data.message);
+          setTimeout(() => setNotification(null), 3500);
+          fetchAdminData();
+        }
+      } catch (err) {
+        showAlert('Terjadi kesalahan koneksi.');
+      } finally {
+        setActionLoadingId(null);
       }
-    } catch (err) {
-      alert('Terjadi kesalahan koneksi.');
-    } finally {
-      setActionLoadingId(null);
-    }
+    });
   };
 
   // Handle Admin Password Change Override
@@ -415,7 +441,7 @@ export default function AdminDashboard() {
 
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error || 'Gagal merubah password user.');
+        showAlert(data.error || 'Gagal merubah password user.');
       } else {
         setNotification(data.message);
         setPassModalUser(null);
@@ -423,7 +449,7 @@ export default function AdminDashboard() {
         setTimeout(() => setNotification(null), 3500);
       }
     } catch (err) {
-      alert('Terjadi kesalahan koneksi.');
+      showAlert('Terjadi kesalahan koneksi.');
     } finally {
       setPassLoading(false);
     }
@@ -431,29 +457,29 @@ export default function AdminDashboard() {
 
   // Handle Reset Stream Key
   const handleResetStreamKey = async (userId: string) => {
-    if (!confirm('Apakah Anda yakin ingin mereset Stream Key user ini secara paksa?')) return;
+    showConfirm('Apakah Anda yakin ingin mereset Stream Key user ini secara paksa?', async () => {
+      setActionLoadingId(userId);
+      try {
+        const res = await fetch('/api/admin/users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'reset_key', userId }),
+        });
 
-    setActionLoadingId(userId);
-    try {
-      const res = await fetch('/api/admin/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'reset_key', userId }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        alert(data.error || 'Gagal mereset key.');
-      } else {
-        setNotification(data.message);
-        setTimeout(() => setNotification(null), 3500);
-        fetchAdminData();
+        const data = await res.json();
+        if (!res.ok) {
+          showAlert(data.error || 'Gagal mereset key.');
+        } else {
+          setNotification(data.message);
+          setTimeout(() => setNotification(null), 3500);
+          fetchAdminData();
+        }
+      } catch (err) {
+        showAlert('Terjadi kesalahan koneksi.');
+      } finally {
+        setActionLoadingId(null);
       }
-    } catch (err) {
-      alert('Terjadi kesalahan koneksi.');
-    } finally {
-      setActionLoadingId(null);
-    }
+    });
   };
 
   // Handle Create Database Snapshot Backup
@@ -464,14 +490,14 @@ export default function AdminDashboard() {
       const data = await res.json();
 
       if (!res.ok) {
-        alert(data.error || 'Gagal membuat backup database.');
+        showAlert(data.error || 'Gagal membuat backup database.');
       } else {
         setNotification(data.message);
         setTimeout(() => setNotification(null), 3500);
         fetchAdminData();
       }
     } catch (err) {
-      alert('Terjadi kesalahan koneksi saat membuat backup.');
+      showAlert('Terjadi kesalahan koneksi saat membuat backup.');
     } finally {
       setBackupLoading(false);
     }
@@ -1216,6 +1242,60 @@ export default function AdminDashboard() {
                 {passLoading ? 'Memperbarui...' : 'Simpan Password Baru User'}
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Alert Modal */}
+      {alertModal && alertModal.isOpen && (
+        <div className="modal-backdrop" style={{ zIndex: 1000 }}>
+          <div className="plan-modal-card" style={{ maxWidth: '400px', textAlign: 'center', padding: '24px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', alignItems: 'center' }}>
+              <div style={{ background: 'var(--bg-terminal)', padding: '12px', borderRadius: '50%', color: 'var(--primary)' }}>
+                <HelpCircle size={28} />
+              </div>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>Pemberitahuan Admin</h3>
+              <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
+                {alertModal.message}
+              </p>
+              <button 
+                onClick={() => setAlertModal(null)}
+                style={{ width: '100%', background: 'var(--primary)', color: '#fff', border: 'none', padding: '10px', borderRadius: 'var(--radius-md)', fontWeight: 600, cursor: 'pointer', marginTop: '8px' }}
+              >
+                Mengerti
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Confirm Modal */}
+      {confirmModal && confirmModal.isOpen && (
+        <div className="modal-backdrop" style={{ zIndex: 1000 }}>
+          <div className="plan-modal-card" style={{ maxWidth: '420px', textAlign: 'center', padding: '24px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', alignItems: 'center' }}>
+              <div style={{ background: 'var(--bg-terminal)', padding: '12px', borderRadius: '50%', color: 'var(--status-warning)' }}>
+                <AlertTriangle size={28} />
+              </div>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>Konfirmasi Aksi Admin</h3>
+              <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
+                {confirmModal.message}
+              </p>
+              <div style={{ display: 'flex', gap: '10px', width: '100%', marginTop: '8px' }}>
+                <button 
+                  onClick={confirmModal.onCancel}
+                  style={{ flex: 1, background: 'var(--bg-terminal)', color: 'var(--text-primary)', border: '1px solid var(--border)', padding: '10px', borderRadius: 'var(--radius-md)', fontWeight: 600, cursor: 'pointer' }}
+                >
+                  Batal
+                </button>
+                <button 
+                  onClick={confirmModal.onConfirm}
+                  style={{ flex: 1, background: 'var(--primary)', color: '#fff', border: 'none', padding: '10px', borderRadius: 'var(--radius-md)', fontWeight: 600, cursor: 'pointer' }}
+                >
+                  Ya, Lanjutkan
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

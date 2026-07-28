@@ -446,21 +446,21 @@ export default function AdminDashboard() {
       {/* Admin Header */}
       <header className="app-header">
         <div className="logo-section">
-          <div className="logo-icon-wrapper" style={{ background: 'linear-gradient(135deg, #eab308 0%, #d97706 100%)' }}>
+          <div className="logo-icon-wrapper" style={{ background: 'var(--status-warning)' }}>
             <ShieldCheck size={20} color="#ffffff" />
           </div>
           <span className="logo-title">MyStream Admin Panel</span>
-          <span className="logo-badge" style={{ backgroundColor: 'rgba(234,179,8,0.15)', color: '#eab308', borderColor: 'rgba(234,179,8,0.3)' }}>DEDICATED CONTROL CENTER</span>
+          <span className="logo-badge" style={{ background: 'var(--bg-terminal)', color: 'var(--status-warning)', borderColor: 'var(--border)' }}>DEDICATED CONTROL CENTER</span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 14px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'var(--text-primary)', textDecoration: 'none', fontSize: '0.82rem', fontWeight: 600 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: 'var(--radius-md)', background: 'var(--bg-terminal)', border: '1px solid var(--border)', color: 'var(--text-primary)', textDecoration: 'none', fontSize: '0.82rem', fontWeight: 600 }}>
             <ArrowLeft size={14} />
             <span>Kembali Ke Studio Feed</span>
           </Link>
 
           <button 
-            style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)', color: 'var(--text-secondary)', padding: '6px 10px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem' }}
+            style={{ background: 'var(--bg-terminal)', border: '1px solid var(--border)', color: 'var(--text-secondary)', padding: '8px 12px', borderRadius: 'var(--radius-md)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem' }}
             onClick={() => signOut({ callbackUrl: '/login' })}
           >
             <LogOut size={13} />

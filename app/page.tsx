@@ -687,12 +687,12 @@ export default function Dashboard() {
           <span className="logo-badge">BROADCAST ENGINE</span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           {/* Super Admin Control Panel Button */}
           {userRole === 'admin' && (
             <Link 
               href="/admin" 
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 14px', borderRadius: '20px', background: 'linear-gradient(135deg, rgba(234,179,8,0.2) 0%, rgba(245,158,11,0.3) 100%)', color: '#fbbf24', border: '1px solid rgba(234,179,8,0.5)', textDecoration: 'none', fontSize: '0.78rem', fontWeight: 800 }}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: 'var(--radius-md)', background: 'var(--bg-terminal)', color: 'var(--status-warning)', border: '1px solid var(--border)', textDecoration: 'none', fontSize: '0.78rem', fontWeight: 600 }}
               title="Buka Control Center Super Admin"
             >
               <ShieldCheck size={14} />
@@ -701,14 +701,14 @@ export default function Dashboard() {
           )}
 
           {/* Hardware CPU Chip */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border)', padding: '6px 14px', borderRadius: '10px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-            <Cpu size={14} color="#10b981" />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg-terminal)', border: '1px solid var(--border)', padding: '6px 12px', borderRadius: 'var(--radius-md)', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+            <Cpu size={14} color="var(--status-success)" />
             <span>Pass-through: <strong style={{ color: 'var(--text-primary)', fontFamily: 'monospace' }}>-c copy (Zero CPU)</strong></span>
           </div>
 
           {/* Active Target Count Pill */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border)', padding: '6px 14px', borderRadius: '10px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-            <Radio size={14} color="#6366f1" />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg-terminal)', border: '1px solid var(--border)', padding: '6px 12px', borderRadius: 'var(--radius-md)', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+            <Radio size={14} color="var(--primary)" />
             <span>Target Active: <strong style={{ color: 'var(--text-primary)', fontFamily: 'monospace' }}>{destinations.length} / {userPlan === 'ultimate' ? 8 : userPlan === 'pro' ? 4 : 2}</strong></span>
           </div>
 
@@ -716,6 +716,7 @@ export default function Dashboard() {
           <button 
             className={`plan-badge-btn ${userPlan}`}
             onClick={() => setIsPlanModalOpen(true)}
+            style={{ borderRadius: 'var(--radius-md)' }}
             title="Klik untuk ubah/upgrade plan membership"
           >
             {userPlan === 'ultimate' ? <Crown size={14} /> : userPlan === 'pro' ? <Sparkles size={14} /> : <Zap size={14} />}
@@ -724,16 +725,16 @@ export default function Dashboard() {
 
           {/* User Profile */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', paddingLeft: '12px', borderLeft: '1px solid var(--border)' }}>
-            <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: userRole === 'admin' ? '#eab308' : 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.85rem', color: '#fff' }}>
+            <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: userRole === 'admin' ? 'var(--status-warning)' : 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.85rem', color: '#fff' }}>
               {session?.user?.name ? session.user.name[0].toUpperCase() : 'U'}
             </div>
-            <span style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+            <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
               {session?.user?.name || 'Studio User'}
             </span>
 
             {/* Ganti Password Button */}
             <button 
-              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)', color: 'var(--text-secondary)', padding: '6px 10px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem' }}
+              style={{ background: 'var(--bg-terminal)', border: '1px solid var(--border)', color: 'var(--text-secondary)', padding: '6px 10px', borderRadius: 'var(--radius-md)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem' }}
               onClick={() => setIsChangePassOpen(true)}
               title="Ubah Password Akun"
             >
@@ -742,7 +743,7 @@ export default function Dashboard() {
             </button>
 
             <button 
-              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)', color: 'var(--text-secondary)', padding: '6px 10px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem' }}
+              style={{ background: 'var(--bg-terminal)', border: '1px solid var(--border)', color: 'var(--text-secondary)', padding: '6px 10px', borderRadius: 'var(--radius-md)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem' }}
               onClick={() => signOut({ callbackUrl: '/login' })}
               title="Keluar / Sign Out"
             >
@@ -752,21 +753,21 @@ export default function Dashboard() {
           </div>
 
           {/* Theme Toggle Buttons */}
-          <div style={{ display: 'flex', gap: '4px', background: 'rgba(0,0,0,0.3)', padding: '3px', borderRadius: '8px', border: '1px solid var(--border)' }}>
+          <div style={{ display: 'flex', gap: '4px', background: 'var(--bg-terminal)', padding: '3px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
             <button 
-              style={{ background: theme === 'light' ? 'var(--primary)' : 'transparent', color: theme === 'light' ? '#fff' : 'var(--text-secondary)', border: 'none', padding: '4px 8px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.72rem', fontWeight: 600 }}
+              style={{ background: theme === 'light' ? 'var(--primary)' : 'transparent', color: theme === 'light' ? '#fff' : 'var(--text-secondary)', border: 'none', padding: '4px 8px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontSize: '0.72rem', fontWeight: 600 }}
               onClick={() => setTheme('light')}
             >
               ☀️ Light
             </button>
             <button 
-              style={{ background: theme === 'dark' ? 'var(--primary)' : 'transparent', color: theme === 'dark' ? '#fff' : 'var(--text-secondary)', border: 'none', padding: '4px 8px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.72rem', fontWeight: 600 }}
+              style={{ background: theme === 'dark' ? 'var(--primary)' : 'transparent', color: theme === 'dark' ? '#fff' : 'var(--text-secondary)', border: 'none', padding: '4px 8px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontSize: '0.72rem', fontWeight: 600 }}
               onClick={() => setTheme('dark')}
             >
               🌙 Dark
             </button>
             <button 
-              style={{ background: theme === 'system' ? 'var(--primary)' : 'transparent', color: theme === 'system' ? '#fff' : 'var(--text-secondary)', border: 'none', padding: '4px 8px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.72rem', fontWeight: 600 }}
+              style={{ background: theme === 'system' ? 'var(--primary)' : 'transparent', color: theme === 'system' ? '#fff' : 'var(--text-secondary)', border: 'none', padding: '4px 8px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontSize: '0.72rem', fontWeight: 600 }}
               onClick={() => setTheme('system')}
             >
               💻 System
@@ -1623,20 +1624,24 @@ export default function Dashboard() {
       )}
 
       {/* Footer Section */}
-      <footer style={{ background: 'var(--bg-footer)', borderTop: '1px solid var(--border)', padding: '16px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+      <footer style={{ background: 'var(--bg-sidebar)', borderTop: '1px solid var(--border)', padding: '20px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span className="pulse-dot" style={{ backgroundColor: 'var(--status-success)', width: '6px', height: '6px' }}></span>
+          <span>RESTREAM ENGINE: <strong>STABLE v1.19.3</strong></span>
+        </div>
         <div>
-          <span>Copyright by <strong>awgxidn © 2026</strong>. All Rights Reserved.</span>
+          <span>awgxidn © 2026. All Rights Reserved.</span>
         </div>
         <div>
           <a
             href="https://github.com/studentawangihti/mystream"
             target="_blank"
             rel="noopener noreferrer"
-            style={{ color: 'var(--primary)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}
+            style={{ color: 'var(--primary)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 500 }}
           >
-            <Terminal size={14} />
-            <span>GitHub Repository: studentawangihti/mystream</span>
-            <ExternalLink size={12} />
+            <Terminal size={13} />
+            <span>GitHub Repository</span>
+            <ExternalLink size={11} />
           </a>
         </div>
       </footer>

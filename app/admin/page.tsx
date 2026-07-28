@@ -112,6 +112,28 @@ export default function AdminDashboard() {
   const [enableWebRtcPlayer, setEnableWebRtcPlayer] = useState(true);
   const [settingsSaving, setSettingsSaving] = useState(false);
 
+  // Plan Configurations State
+  const [freeMaxPlatforms, setFreeMaxPlatforms] = useState(2);
+  const [freeMaxResolution, setFreeMaxResolution] = useState(720);
+  const [freeMaxStorageMb, setFreeMaxStorageMb] = useState(200);
+  const [freeMaxLiveHours, setFreeMaxLiveHours] = useState(4);
+  const [freePrice, setFreePrice] = useState('0');
+  const [freeAdsLabel, setFreeAdsLabel] = useState('Ad-Supported (100% Iklan & Watermark)');
+
+  const [proMaxPlatforms, setProMaxPlatforms] = useState(4);
+  const [proMaxResolution, setProMaxResolution] = useState(1080);
+  const [proMaxStorageMb, setProMaxStorageMb] = useState(5000);
+  const [proMaxLiveHours, setProMaxLiveHours] = useState(0);
+  const [proPrice, setProPrice] = useState('49.000');
+  const [proAdsLabel, setProAdsLabel] = useState('Minimal Ads (25% Minimal Iklan)');
+
+  const [ultimateMaxPlatforms, setUltimateMaxPlatforms] = useState(8);
+  const [ultimateMaxResolution, setUltimateMaxResolution] = useState(2160);
+  const [ultimateMaxStorageMb, setUltimateMaxStorageMb] = useState(25000);
+  const [ultimateMaxLiveHours, setUltimateMaxLiveHours] = useState(0);
+  const [ultimatePrice, setUltimatePrice] = useState('99.000');
+  const [ultimateAdsLabel, setUltimateAdsLabel] = useState('100% Ad-Free & Watermark-Free');
+
   // Change Password Modal state for Admin override
   const [passModalUser, setPassModalUser] = useState<UserData | null>(null);
   const [newAdminPasswordInput, setNewAdminPasswordInput] = useState('');
@@ -156,6 +178,28 @@ export default function AdminDashboard() {
         if (s.ingestUrl !== undefined) setIngestUrl(s.ingestUrl);
         if (s.enableCloudUpload !== undefined) setEnableCloudUpload(s.enableCloudUpload === 'true');
         if (s.enableWebRtcPlayer !== undefined) setEnableWebRtcPlayer(s.enableWebRtcPlayer === 'true');
+
+        // Parse dynamic plan settings
+        if (s.plan_free_maxPlatforms !== undefined) setFreeMaxPlatforms(Number(s.plan_free_maxPlatforms));
+        if (s.plan_free_maxResolution !== undefined) setFreeMaxResolution(Number(s.plan_free_maxResolution));
+        if (s.plan_free_maxStorageMb !== undefined) setFreeMaxStorageMb(Number(s.plan_free_maxStorageMb));
+        if (s.plan_free_maxLiveHours !== undefined) setFreeMaxLiveHours(Number(s.plan_free_maxLiveHours));
+        if (s.plan_free_price !== undefined) setFreePrice(s.plan_free_price);
+        if (s.plan_free_adsLabel !== undefined) setFreeAdsLabel(s.plan_free_adsLabel);
+
+        if (s.plan_pro_maxPlatforms !== undefined) setProMaxPlatforms(Number(s.plan_pro_maxPlatforms));
+        if (s.plan_pro_maxResolution !== undefined) setProMaxResolution(Number(s.plan_pro_maxResolution));
+        if (s.plan_pro_maxStorageMb !== undefined) setProMaxStorageMb(Number(s.plan_pro_maxStorageMb));
+        if (s.plan_pro_maxLiveHours !== undefined) setProMaxLiveHours(Number(s.plan_pro_maxLiveHours));
+        if (s.plan_pro_price !== undefined) setProPrice(s.plan_pro_price);
+        if (s.plan_pro_adsLabel !== undefined) setProAdsLabel(s.plan_pro_adsLabel);
+
+        if (s.plan_ultimate_maxPlatforms !== undefined) setUltimateMaxPlatforms(Number(s.plan_ultimate_maxPlatforms));
+        if (s.plan_ultimate_maxResolution !== undefined) setUltimateMaxResolution(Number(s.plan_ultimate_maxResolution));
+        if (s.plan_ultimate_maxStorageMb !== undefined) setUltimateMaxStorageMb(Number(s.plan_ultimate_maxStorageMb));
+        if (s.plan_ultimate_maxLiveHours !== undefined) setUltimateMaxLiveHours(Number(s.plan_ultimate_maxLiveHours));
+        if (s.plan_ultimate_price !== undefined) setUltimatePrice(s.plan_ultimate_price);
+        if (s.plan_ultimate_adsLabel !== undefined) setUltimateAdsLabel(s.plan_ultimate_adsLabel);
       }
     } catch (err) {
       console.error('Failed to fetch admin data:', err);
@@ -179,6 +223,24 @@ export default function AdminDashboard() {
             ingestUrl,
             enableCloudUpload: String(enableCloudUpload),
             enableWebRtcPlayer: String(enableWebRtcPlayer),
+            plan_free_maxPlatforms: String(freeMaxPlatforms),
+            plan_free_maxResolution: String(freeMaxResolution),
+            plan_free_maxStorageMb: String(freeMaxStorageMb),
+            plan_free_maxLiveHours: String(freeMaxLiveHours),
+            plan_free_price: freePrice,
+            plan_free_adsLabel: freeAdsLabel,
+            plan_pro_maxPlatforms: String(proMaxPlatforms),
+            plan_pro_maxResolution: String(proMaxResolution),
+            plan_pro_maxStorageMb: String(proMaxStorageMb),
+            plan_pro_maxLiveHours: String(proMaxLiveHours),
+            plan_pro_price: proPrice,
+            plan_pro_adsLabel: proAdsLabel,
+            plan_ultimate_maxPlatforms: String(ultimateMaxPlatforms),
+            plan_ultimate_maxResolution: String(ultimateMaxResolution),
+            plan_ultimate_maxStorageMb: String(ultimateMaxStorageMb),
+            plan_ultimate_maxLiveHours: String(ultimateMaxLiveHours),
+            plan_ultimate_price: ultimatePrice,
+            plan_ultimate_adsLabel: ultimateAdsLabel,
           }
         }),
       });
@@ -995,6 +1057,111 @@ export default function AdminDashboard() {
                       <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Menampilkan jendela preview player WebRTC bersuara di dashboard utama pengguna.</span>
                     </div>
                   </label>
+                </div>
+              </div>
+
+              <div style={{ borderTop: '1px solid var(--border)', paddingTop: '20px', marginTop: '20px' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)', display: 'block', marginBottom: '14px', letterSpacing: '0.05em' }}>PENGATURAN TIER MEMBERSHIP & BATASAN (MEMBERSHIP TIERS & QUOTAS)</span>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                  {/* FREE PLAN */}
+                  <div style={{ background: 'var(--bg-terminal)', padding: '16px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)' }}>
+                    <h4 style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ color: 'var(--text-muted)' }}>⚪</span> FREE PLAN
+                    </h4>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px' }}>
+                      <div className="form-group">
+                        <label className="form-label">Harga Teks (Price Label)</label>
+                        <input type="text" className="input-text" value={freePrice} onChange={(e) => setFreePrice(e.target.value)} />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">Maks Platform (Platforms)</label>
+                        <input type="number" className="input-text" value={freeMaxPlatforms} onChange={(e) => setFreeMaxPlatforms(Number(e.target.value))} />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">Resolusi Maks (e.g. 720, 1080)</label>
+                        <input type="number" className="input-text" value={freeMaxResolution} onChange={(e) => setFreeMaxResolution(Number(e.target.value))} />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">Batas Cloud Storage (MB)</label>
+                        <input type="number" className="input-text" value={freeMaxStorageMb} onChange={(e) => setFreeMaxStorageMb(Number(e.target.value))} />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">Batas Live Jam (Hours, 0=unlimited)</label>
+                        <input type="number" className="input-text" value={freeMaxLiveHours} onChange={(e) => setFreeMaxLiveHours(Number(e.target.value))} />
+                      </div>
+                      <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                        <label className="form-label">Deskripsi Iklan/Manfaat (Ads Label)</label>
+                        <input type="text" className="input-text" value={freeAdsLabel} onChange={(e) => setFreeAdsLabel(e.target.value)} />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* PRO MEMBER */}
+                  <div style={{ background: 'var(--bg-terminal)', padding: '16px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)' }}>
+                    <h4 style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--secondary)', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ color: 'var(--secondary)' }}>✨</span> PRO MEMBER
+                    </h4>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px' }}>
+                      <div className="form-group">
+                        <label className="form-label">Harga Teks (Price Label)</label>
+                        <input type="text" className="input-text" value={proPrice} onChange={(e) => setProPrice(e.target.value)} />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">Maks Platform (Platforms)</label>
+                        <input type="number" className="input-text" value={proMaxPlatforms} onChange={(e) => setProMaxPlatforms(Number(e.target.value))} />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">Resolusi Maks (e.g. 720, 1080)</label>
+                        <input type="number" className="input-text" value={proMaxResolution} onChange={(e) => setProMaxResolution(Number(e.target.value))} />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">Batas Cloud Storage (MB)</label>
+                        <input type="number" className="input-text" value={proMaxStorageMb} onChange={(e) => setProMaxStorageMb(Number(e.target.value))} />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">Batas Live Jam (Hours, 0=unlimited)</label>
+                        <input type="number" className="input-text" value={proMaxLiveHours} onChange={(e) => setProMaxLiveHours(Number(e.target.value))} />
+                      </div>
+                      <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                        <label className="form-label">Deskripsi Iklan/Manfaat (Ads Label)</label>
+                        <input type="text" className="input-text" value={proAdsLabel} onChange={(e) => setProAdsLabel(e.target.value)} />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ULTIMATE VIP */}
+                  <div style={{ background: 'var(--bg-terminal)', padding: '16px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)' }}>
+                    <h4 style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--status-warning)', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ color: 'var(--status-warning)' }}>👑</span> ULTIMATE VIP
+                    </h4>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px' }}>
+                      <div className="form-group">
+                        <label className="form-label">Harga Teks (Price Label)</label>
+                        <input type="text" className="input-text" value={ultimatePrice} onChange={(e) => setUltimatePrice(e.target.value)} />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">Maks Platform (Platforms)</label>
+                        <input type="number" className="input-text" value={ultimateMaxPlatforms} onChange={(e) => setUltimateMaxPlatforms(Number(e.target.value))} />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">Resolusi Maks (e.g. 720, 1080)</label>
+                        <input type="number" className="input-text" value={ultimateMaxResolution} onChange={(e) => setUltimateMaxResolution(Number(e.target.value))} />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">Batas Cloud Storage (MB)</label>
+                        <input type="number" className="input-text" value={ultimateMaxStorageMb} onChange={(e) => setUltimateMaxStorageMb(Number(e.target.value))} />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">Batas Live Jam (Hours, 0=unlimited)</label>
+                        <input type="number" className="input-text" value={ultimateMaxLiveHours} onChange={(e) => setUltimateMaxLiveHours(Number(e.target.value))} />
+                      </div>
+                      <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                        <label className="form-label">Deskripsi Iklan/Manfaat (Ads Label)</label>
+                        <input type="text" className="input-text" value={ultimateAdsLabel} onChange={(e) => setUltimateAdsLabel(e.target.value)} />
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 

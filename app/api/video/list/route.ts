@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import { prisma } from '@/lib/prisma';
+import { getPlanConfigs } from '@/lib/plans';
 import fs from 'fs';
 import path from 'path';
 
@@ -29,16 +30,12 @@ export async function GET(req: Request) {
 
     const usedStorageBytes = videos.reduce((acc, v) => acc + BigInt(v.sizeBytes), BigInt(0));
 
-    let maxStorageBytes = BigInt(209715200); // 200 MB for Free
-    let maxStorageLabel = '200 MB';
+    const planConfigs = await getPlanConfigs();
+    const currentPlanConfig = planConfigs[userPlan] || planConfigs.free;
 
-    if (userPlan === 'pro') {
-      maxStorageBytes = BigInt(5368709120); // 5 GB for Pro
-      maxStorageLabel = '5 GB';
-    } else if (userPlan === 'ultimate') {
-      maxStorageBytes = BigInt(26843545600); // 25 GB for Ultimate
-      maxStorageLabel = '25 GB';
-    }
+    const maxStorageMb = currentPlanConfig.maxStorageMb;
+    const maxStorageBytes = BigInt(maxStorageMb) * BigInt(1024 * 1024);
+    const maxStorageLabel = maxStorageMb >= 1000 ? `${(maxStorageMb / 1000).toFixed(0)} GB` : `${maxStorageMb} MB`;
 
     const formattedVideos = videos.map((v) => ({
       ...v,

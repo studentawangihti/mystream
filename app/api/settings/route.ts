@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getPlanConfigs } from '@/lib/plans';
 
 export async function GET() {
   try {
@@ -20,8 +21,9 @@ export async function GET() {
     };
 
     const finalSettings = { ...defaults, ...settings };
+    const plans = await getPlanConfigs();
 
-    return NextResponse.json({ settings: finalSettings });
+    return NextResponse.json({ settings: finalSettings, plans });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

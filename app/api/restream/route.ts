@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import { spawn, ChildProcess } from 'child_process';
 import { prisma } from '@/lib/prisma';
+import { getPlanConfigs } from '@/lib/plans';
 import path from 'path';
 import fs from 'fs';
 
@@ -298,12 +299,16 @@ export async function POST(req: Request) {
         // Fallback: If MediaMTX API is unreachable (e.g. starting up), proceed without blocking
       }
 
+      // Get plan configurations
+      const planConfigs = await getPlanConfigs();
+      const currentPlanConfig = planConfigs[userPlan] || planConfigs.free;
+
       // Enforce 3-Tier Platform Limits
-      const maxPlatforms = userPlan === 'ultimate' ? 8 : userPlan === 'pro' ? 4 : 2;
+      const maxPlatforms = currentPlanConfig.maxPlatforms;
       if (destinations.length > maxPlatforms) {
         return NextResponse.json(
           {
-            error: `Plan Anda (${userPlan.toUpperCase()}) dibatasi maksimal ${maxPlatforms} platform target. Silakan upgrade plan Anda untuk menambah lebih banyak platform!`,
+            error: `Plan Anda (${userPlan.toUpperCase()}) dibatasi maksimal ${maxPlatforms} platform target. Silakan hubungi admin atau upgrade plan Anda!`,
           },
           { status: 403 }
         );
@@ -354,12 +359,12 @@ export async function POST(req: Request) {
             let isRejected = false;
             let rejectReason = '';
 
-            if (userPlan === 'free' && (height > 720 || width > 1280)) {
+            const maxRes = currentPlanConfig.maxResolution;
+            const maxAllowedWidth = maxRes === 720 ? 1280 : maxRes === 1080 ? 1920 : 3840;
+
+            if (height > maxRes || width > maxAllowedWidth) {
               isRejected = true;
-              rejectReason = `Free Plan dibatasi maksimal 720p HD (1280x720). Resolusi terdeteksi ${width}x${height}. Sesi otomatis dihentikan!`;
-            } else if (userPlan === 'pro' && (height > 1080 || width > 1920)) {
-              isRejected = true;
-              rejectReason = `Pro Member dibatasi maksimal 1080p Full HD (1920x1080). Resolusi terdeteksi ${width}x${height}. Sesi otomatis dihentikan!`;
+              rejectReason = `Resolusi terdeteksi ${width}x${height}. Plan Anda (${userPlan.toUpperCase()}) dibatasi maksimal ${maxRes}p (${maxAllowedWidth}x${maxRes}). Sesi otomatis dihentikan!`;
             }
 
             if (isRejected) {
@@ -397,11 +402,12 @@ export async function POST(req: Request) {
             const [h, m, s] = durationStr.split(':').map((v) => parseInt(v) || 0);
             const totalSecs = h * 3600 + m * 60 + s;
 
-            // Free Plan 4-hour live limit check (14,400 seconds)
-            if (userPlan === 'free' && totalSecs >= 14400) {
+            // Dynamic Plan live limit check
+            const maxLiveSecs = currentPlanConfig.maxLiveHours * 3600;
+            if (maxLiveSecs > 0 && totalSecs >= maxLiveSecs) {
               ffmpegProc.kill('SIGTERM');
               activeMap.delete(dest.id);
-              const limitMsg = '⏳ Sesi 4 Jam Free Plan telah selesai. Silakan upgrade ke Pro/Ultimate untuk live 24/7 non-stop!';
+              const limitMsg = `⏳ Sesi ${currentPlanConfig.maxLiveHours} Jam ${userPlan.toUpperCase()} Plan telah selesai. Silakan hubungi admin atau upgrade plan Anda!`;
               prisma.destination.update({
                 where: { id: dest.id },
                 data: { status: 'idle', errorMsg: limitMsg },
@@ -411,9 +417,9 @@ export async function POST(req: Request) {
                 fps: 0,
                 bitrate: 0,
                 speed: '0x',
-                duration: '04:00:00',
-                durationSeconds: 14400,
-                resolution: '720p HD',
+                duration: `${String(currentPlanConfig.maxLiveHours).padStart(2, '0')}:00:00`,
+                durationSeconds: maxLiveSecs,
+                resolution: `${currentPlanConfig.maxResolution}p`,
                 plan: userPlan,
                 adStatus: 'Sesi Selesai',
                 status: 'idle',
@@ -428,9 +434,9 @@ export async function POST(req: Request) {
               speed: speedMatch ? speedMatch[1] : '1.0x',
               duration: durationStr,
               durationSeconds: totalSecs,
-              resolution: resMatch ? `${resMatch[1]}x${resMatch[2]}` : (userPlan === 'ultimate' ? '4K Ultra HD' : userPlan === 'pro' ? '1080p FHD' : '720p HD'),
+              resolution: resMatch ? `${resMatch[1]}x${resMatch[2]}` : `${currentPlanConfig.maxResolution}p`,
               plan: userPlan,
-              adStatus: userPlan === 'ultimate' ? '👑 100% Ad-Free (VIP Non-Stop)' : userPlan === 'pro' ? '✨ Minimal Ads (25% Iklan)' : '📢 Ad-Supported Stream',
+              adStatus: currentPlanConfig.adsLabel,
               status: 'broadcasting',
               activeSource: 'obs',
             });

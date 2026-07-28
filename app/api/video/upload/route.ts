@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import { prisma } from '@/lib/prisma';
+import { getPlanConfigs } from '@/lib/plans';
 import fs from 'fs';
 import path from 'path';
 import { exec } from 'child_process';
@@ -109,16 +110,12 @@ export async function POST(req: Request) {
 
     const currentUsedBytes = existingVideos.reduce((acc, curr) => acc + BigInt(curr.sizeBytes), BigInt(0));
 
-    let maxTotalStorage = BigInt(209715200); // 200 MB for Free
-    let maxStorageLabel = '200 MB';
+    const planConfigs = await getPlanConfigs();
+    const currentPlanConfig = planConfigs[userPlan] || planConfigs.free;
 
-    if (userPlan === 'pro') {
-      maxTotalStorage = BigInt(5368709120); // 5 GB for Pro
-      maxStorageLabel = '5 GB';
-    } else if (userPlan === 'ultimate') {
-      maxTotalStorage = BigInt(26843545600); // 25 GB for Ultimate
-      maxStorageLabel = '25 GB';
-    }
+    const maxStorageMb = currentPlanConfig.maxStorageMb;
+    const maxTotalStorage = BigInt(maxStorageMb) * BigInt(1024 * 1024);
+    const maxStorageLabel = maxStorageMb >= 1000 ? `${(maxStorageMb / 1000).toFixed(0)} GB` : `${maxStorageMb} MB`;
 
     if (currentUsedBytes + BigInt(fileSize) > maxTotalStorage) {
       const usedMB = (Number(currentUsedBytes) / (1024 * 1024)).toFixed(1);

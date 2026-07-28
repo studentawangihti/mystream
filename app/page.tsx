@@ -144,6 +144,7 @@ export default function Dashboard() {
   const [ingestUrlSetting, setIngestUrlSetting] = useState('rtmp://restream.awgverse.site/live');
   const [enableCloudUpload, setEnableCloudUpload] = useState(true);
   const [enableWebRtcPlayer, setEnableWebRtcPlayer] = useState(true);
+  const [plans, setPlans] = useState<any>(null);
 
   // Unsaved destination edits ref to prevent 3s polling from wiping out user input
   const isEditingDestinationsRef = useRef<boolean>(false);
@@ -308,6 +309,9 @@ export default function Dashboard() {
         if (s.ingestUrl) setIngestUrlSetting(s.ingestUrl);
         if (s.enableCloudUpload !== undefined) setEnableCloudUpload(s.enableCloudUpload === 'true');
         if (s.enableWebRtcPlayer !== undefined) setEnableWebRtcPlayer(s.enableWebRtcPlayer === 'true');
+      }
+      if (settingsData.plans) {
+        setPlans(settingsData.plans);
       }
 
       setLoading(false);
@@ -1517,77 +1521,108 @@ export default function Dashboard() {
               </button>
             </div>
 
-            <div className="plan-grid">
-              {/* Free Plan Card */}
-              <div className={`plan-card ${userPlan === 'free' ? 'active-plan' : ''}`}>
-                <div className="plan-header">
-                  <Zap size={24} color="#94a3b8" />
-                  <h4>FREE PLAN</h4>
-                  <span className="price">Rp 0 <small>/ bulan</small></span>
-                </div>
-                <ul className="plan-features">
-                  <li>✅ Maksimal 2 Target Platform</li>
-                  <li>✅ Batas Resolusi 720p HD</li>
-                  <li>☁️ Cloud Storage: Max 200 MB Total Storage</li>
-                  <li>⏱️ Max 4 Jam per Sesi Live</li>
-                  <li>📢 Ad-Supported (100% Iklan & Watermark)</li>
-                </ul>
-                <button 
-                  className={`select-plan-btn ${userPlan === 'free' ? 'current' : ''}`}
-                  onClick={() => handleSwitchPlan('free')}
-                  disabled={userPlan === 'free'}
-                >
-                  {userPlan === 'free' ? 'Plan Saat Ini' : 'Pilih Free Plan'}
-                </button>
-              </div>
+            {(() => {
+              const freePlan = plans?.free || {
+                price: '0',
+                maxPlatforms: 2,
+                maxResolution: 720,
+                maxStorageMb: 200,
+                maxLiveHours: 4,
+                adsLabel: 'Ad-Supported (100% Iklan & Watermark)',
+              };
 
-              {/* Pro Member Card */}
-              <div className={`plan-card pro ${userPlan === 'pro' ? 'active-plan' : ''}`}>
-                <div className="popular-badge">RECOMMENDED</div>
-                <div className="plan-header">
-                  <Sparkles size={24} color="#6366f1" />
-                  <h4>PRO MEMBER</h4>
-                  <span className="price">Rp 49.000 <small>/ bulan</small></span>
-                </div>
-                <ul className="plan-features">
-                  <li>✅ Maksimal 4 Target Platform</li>
-                  <li>✅ Batas Resolusi 1080p Full HD</li>
-                  <li>☁️ Cloud Storage: Max 5 GB Total Storage</li>
-                  <li>♾️ Unlimited Live Stream 24/7</li>
-                  <li>✨ Minimal Ads (25% Minimal Iklan)</li>
-                </ul>
-                <button 
-                  className={`select-plan-btn pro ${userPlan === 'pro' ? 'current' : ''}`}
-                  onClick={() => handleSwitchPlan('pro')}
-                  disabled={userPlan === 'pro'}
-                >
-                  {userPlan === 'pro' ? 'Plan Saat Ini' : 'Aktifkan Pro Member'}
-                </button>
-              </div>
+              const proPlan = plans?.pro || {
+                price: '49.000',
+                maxPlatforms: 4,
+                maxResolution: 1080,
+                maxStorageMb: 5000,
+                maxLiveHours: 0,
+                adsLabel: 'Minimal Ads (25% Minimal Iklan)',
+              };
 
-              {/* Ultimate VIP Card */}
-              <div className={`plan-card ultimate ${userPlan === 'ultimate' ? 'active-plan' : ''}`}>
-                <div className="plan-header">
-                  <Crown size={24} color="#eab308" />
-                  <h4>ULTIMATE VIP</h4>
-                  <span className="price">Rp 99.000 <small>/ bulan</small></span>
+              const ultimatePlan = plans?.ultimate || {
+                price: '99.000',
+                maxPlatforms: 8,
+                maxResolution: 2160,
+                maxStorageMb: 25000,
+                maxLiveHours: 0,
+                adsLabel: '100% Ad-Free & Watermark-Free',
+              };
+
+              return (
+                <div className="plan-grid">
+                  {/* Free Plan Card */}
+                  <div className={`plan-card ${userPlan === 'free' ? 'active-plan' : ''}`}>
+                    <div className="plan-header">
+                      <Zap size={24} color="#94a3b8" />
+                      <h4>FREE PLAN</h4>
+                      <span className="price">Rp {freePlan.price} <small>/ bulan</small></span>
+                    </div>
+                    <ul className="plan-features">
+                      <li>✅ Maksimal {freePlan.maxPlatforms} Target Platform</li>
+                      <li>✅ Batas Resolusi {freePlan.maxResolution}p HD</li>
+                      <li>☁️ Cloud Storage: Max {freePlan.maxStorageMb >= 1000 ? `${(freePlan.maxStorageMb / 1000).toFixed(0)} GB` : `${freePlan.maxStorageMb} MB`}</li>
+                      <li>⏱️ {freePlan.maxLiveHours > 0 ? `Maksimal ${freePlan.maxLiveHours} Jam per Sesi Live` : 'Unlimited Sesi Live Stream'}</li>
+                      <li>📢 {freePlan.adsLabel}</li>
+                    </ul>
+                    <button 
+                      className={`select-plan-btn ${userPlan === 'free' ? 'current' : ''}`}
+                      onClick={() => handleSwitchPlan('free')}
+                      disabled={userPlan === 'free'}
+                    >
+                      {userPlan === 'free' ? 'Plan Saat Ini' : 'Pilih Free Plan'}
+                    </button>
+                  </div>
+
+                  {/* Pro Member Card */}
+                  <div className={`plan-card pro ${userPlan === 'pro' ? 'active-plan' : ''}`}>
+                    <div className="popular-badge">RECOMMENDED</div>
+                    <div className="plan-header">
+                      <Sparkles size={24} color="#6366f1" />
+                      <h4>PRO MEMBER</h4>
+                      <span className="price">Rp {proPlan.price} <small>/ bulan</small></span>
+                    </div>
+                    <ul className="plan-features">
+                      <li>✅ Maksimal {proPlan.maxPlatforms} Target Platform</li>
+                      <li>✅ Batas Resolusi {proPlan.maxResolution}p Full HD</li>
+                      <li>☁️ Cloud Storage: Max {proPlan.maxStorageMb >= 1000 ? `${(proPlan.maxStorageMb / 1000).toFixed(0)} GB` : `${proPlan.maxStorageMb} MB`}</li>
+                      <li>⏱️ {proPlan.maxLiveHours > 0 ? `Maksimal ${proPlan.maxLiveHours} Jam per Sesi Live` : 'Unlimited Sesi Live Stream'}</li>
+                      <li>✨ {proPlan.adsLabel}</li>
+                    </ul>
+                    <button 
+                      className={`select-plan-btn pro ${userPlan === 'pro' ? 'current' : ''}`}
+                      onClick={() => handleSwitchPlan('pro')}
+                      disabled={userPlan === 'pro'}
+                    >
+                      {userPlan === 'pro' ? 'Plan Saat Ini' : 'Aktifkan Pro Member'}
+                    </button>
+                  </div>
+
+                  {/* Ultimate VIP Card */}
+                  <div className={`plan-card ultimate ${userPlan === 'ultimate' ? 'active-plan' : ''}`}>
+                    <div className="plan-header">
+                      <Crown size={24} color="#eab308" />
+                      <h4>ULTIMATE VIP</h4>
+                      <span className="price">Rp {ultimatePlan.price} <small>/ bulan</small></span>
+                    </div>
+                    <ul className="plan-features">
+                      <li>✅ Maksimal {ultimatePlan.maxPlatforms} Target Platform</li>
+                      <li>✅ Batas Resolusi {ultimatePlan.maxResolution}p Ultra HD</li>
+                      <li>☁️ Cloud Storage: Max {ultimatePlan.maxStorageMb >= 1000 ? `${(ultimatePlan.maxStorageMb / 1000).toFixed(0)} GB` : `${ultimatePlan.maxStorageMb} MB`}</li>
+                      <li>⏱️ {ultimatePlan.maxLiveHours > 0 ? `Maksimal ${ultimatePlan.maxLiveHours} Jam per Sesi Live` : 'Unlimited Sesi Live Stream'}</li>
+                      <li>👑 {ultimatePlan.adsLabel}</li>
+                    </ul>
+                    <button 
+                      className={`select-plan-btn ultimate ${userPlan === 'ultimate' ? 'current' : ''}`}
+                      onClick={() => handleSwitchPlan('ultimate')}
+                      disabled={userPlan === 'ultimate'}
+                    >
+                      {userPlan === 'ultimate' ? 'Plan Saat Ini' : 'Aktifkan Ultimate VIP'}
+                    </button>
+                  </div>
                 </div>
-                <ul className="plan-features">
-                  <li>✅ Maksimal 8 Target Platform</li>
-                  <li>✅ Super Ultra HD 4K60 (3840x2160)</li>
-                  <li>☁️ Cloud Storage: Max 25 GB Total Storage</li>
-                  <li>♾️ Unlimited Live Stream 24/7</li>
-                  <li>👑 100% Ad-Free & Watermark-Free</li>
-                </ul>
-                <button 
-                  className={`select-plan-btn ultimate ${userPlan === 'ultimate' ? 'current' : ''}`}
-                  onClick={() => handleSwitchPlan('ultimate')}
-                  disabled={userPlan === 'ultimate'}
-                >
-                  {userPlan === 'ultimate' ? 'Plan Saat Ini' : 'Aktifkan Ultimate VIP'}
-                </button>
-              </div>
-            </div>
+              );
+            })()}
           </div>
         </div>
       )}

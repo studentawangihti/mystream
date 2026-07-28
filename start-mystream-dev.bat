@@ -17,12 +17,14 @@ call npx prisma db push --skip-generate >nul 2>&1
 echo [3/3] Menjalankan Server Web Dashboard (Next.js)...
 echo.
 echo ===================================================================
-echo   DASHBOARD AKAN TERBUKA DI BROWSER: http://localhost:3000
+echo   DASHBOARD AKAN TERBUKA DI BROWSER: http://localhost:3123
 echo   (Jangan tutup jendela command prompt ini selama aplikasi dipakai)
 echo ===================================================================
 echo.
 
 timeout /t 3 >nul
-start http://localhost:3000
+start http://localhost:3123
 
+set PORT=3123
+set NEXTAUTH_URL=https://devrestream.awgverse.site
 call npm run dev

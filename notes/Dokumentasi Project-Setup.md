@@ -3,33 +3,21 @@
 Dokumen ini berisi panduan lengkap cara menjalankan proyek, membuka database SQLite, serta langkah-langkah mendepoloy aplikasi MyStream Studio ke publik.
 
 ---
-
 ## 🚀 1. Cara Menjalankan Proyek (Running Project)
 
-Terdapat 2 metode untuk menjalankan proyek ini di laptop/komputer Anda:
+Terdapat 2 metode peluncur otomatis (1-Click Launcher) untuk menjalankan proyek ini:
 
-### Metode A: 1-Click Launcher (Paling Praktis) ⭐
-1. Buka folder proyek: `c:\laragon\www\my-youtube-clone`.
-2. **Klik 2x (Double Click)** pada file **`start.bat`** atau **`start-mystream.bat`**.
-3. Otomatis MediaMTX server, Database SQLite, dan Web Next.js akan berjalan bersamaan, serta membuka browser ke `http://localhost:3000`.
+### A. Development Mode (Port 3123)
+* **File Peluncur**: **`start-dev.bat`** (memanggil **`start-mystream-dev.bat`**).
+* **Alamat Browser**: `http://localhost:3123` (atau via domain kustom `https://devrestream.awgverse.site/`).
+* **Catatan NEXTAUTH_URL**:
+  * File `start-mystream-dev.bat` diatur dengan `set NEXTAUTH_URL=https://devrestream.awgverse.site` agar NextAuth berfungsi saat diakses dari domain kustom.
+  * **PENTING**: Jika sewaktu-waktu Anda ingin membukanya kembali via `http://localhost:3123` secara lokal tanpa domain kustom, Anda tinggal mengubah kembali nilai `NEXTAUTH_URL` tersebut ke `http://localhost:3123` atau menonaktifkannya (diberi tanda rem/dihapus) di file `start-mystream-dev.bat`.
 
-### Metode B: Manual Terminal Step-by-Step
-Jika ingin menjalankan lewat terminal CMD / PowerShell secara terpisah:
-
-1. **Terminal 1 (Menjalankan Streaming Server MediaMTX)**:
-   ```cmd
-   C:\mediamtx\mediamtx.exe
-   ```
-   *(Biarkan jendela terminal ini tetap terbuka di background)*.
-
-2. **Terminal 2 (Menjalankan Web Server Next.js)**:
-   ```cmd
-   cd c:\laragon\www\my-youtube-clone
-   npm run dev
-   ```
-
-3. **Buka Browser**:
-   Akses `http://localhost:3000`.
+### B. Production Mode (Port 3124)
+* **File Peluncur**: **`start-live.bat`** (memanggil **`start-mystream-prod.bat`**).
+* **Alamat Browser**: `http://localhost:3124`.
+* Melakukan build build Next.js terlebih dahulu secara otomatis sebelum menjalankan server.
 
 ---
 

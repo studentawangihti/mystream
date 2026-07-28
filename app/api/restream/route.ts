@@ -278,6 +278,26 @@ export async function POST(req: Request) {
         );
       }
 
+      // Check if OBS stream is active on MediaMTX
+      try {
+        const mtxRes = await fetch('http://127.0.0.1:9997/v3/paths/list');
+        if (mtxRes.ok) {
+          const mtxData = await mtxRes.json();
+          const targetPathName = `live/${userIngestKey}`;
+          const isStreamReady = mtxData.items?.some((item: any) => item.name === targetPathName && item.ready === true);
+
+          if (!isStreamReady) {
+            return NextResponse.json(
+              { error: 'Belum ada sinyal masuk dari OBS Studio. Silakan klik "Mulai Streaming" di OBS terlebih dahulu sebelum menekan tombol Mulai Restream.' },
+              { status: 400 }
+            );
+          }
+        }
+      } catch (err) {
+        console.error('Failed to query MediaMTX API:', err);
+        // Fallback: If MediaMTX API is unreachable (e.g. starting up), proceed without blocking
+      }
+
       // Enforce 3-Tier Platform Limits
       const maxPlatforms = userPlan === 'ultimate' ? 8 : userPlan === 'pro' ? 4 : 2;
       if (destinations.length > maxPlatforms) {

@@ -606,8 +606,13 @@ export default function Dashboard() {
   // Handle Start / Stop Restream
   const handleToggleRestream = async () => {
     const isRunning = telemetry.status === 'broadcasting';
-    const action = isRunning ? 'stop_all' : 'start_all';
+    
+    if (!isRunning) {
+      const confirmStart = confirm('Apakah Anda yakin ingin mulai melakukan restreaming ke semua platform target?');
+      if (!confirmStart) return;
+    }
 
+    const action = isRunning ? 'stop_all' : 'start_all';
     setActionLoading(true);
     try {
       const res = await fetch('/api/restream', {
